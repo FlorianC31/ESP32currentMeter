@@ -6,18 +6,19 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
-#include "esp_adc/adc_oneshot.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_http_server.h"
 #include "esp_netif.h"
 #include "cJSON.h"
+#include "esp_adc/adc_continuous.h"
 
 #define WIFI_SSID "Livebox-Florelie"
 #define WIFI_PASS "r24hpkr2"
 
 #define NUM_CHANNELS 7
-#define SAMPLE_RATE 1000 //6250
+#define SAMPLE_RATE 1000
+#define DMA_BUFFER_SIZE (1024 * SOC_ADC_DIGI_DATA_BYTES_PER_CONV)
 
 static const adc_channel_t ADC_CHANNELS[NUM_CHANNELS] = {
     ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3,
@@ -27,31 +28,43 @@ static const adc_channel_t ADC_CHANNELS[NUM_CHANNELS] = {
 static volatile int adcValues[NUM_CHANNELS] = {0};
 static volatile bool actionFlag = false;
 static SemaphoreHandle_t mutex;
-static adc_oneshot_unit_handle_t adc1_handle;
+static uint8_t *adc_raw;
+static adc_continuous_handle_t adc_handle = NULL;
 
 static int64_t maxTime = 0;
 static int64_t minTime = 1000000;
 static int64_t meanTime = 0;
-
 static const int64_t nbSamples = 1000;
 static volatile int s = 0;
 
+static bool IRAM_ATTR adc_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data) {
+    BaseType_t high_task_awoken = pdFALSE;
+    
+    // Signal that new data is ready
+    vTaskNotifyGiveFromISR(user_data, &high_task_awoken);
+
+    return high_task_awoken == pdTRUE;
+}
+
 static void adc_timer_callback(void* arg) {
-    //ESP_LOGI("ADC", "Reading ADC");
-    //gpio_set_level(GPIO_NUM_6, 1);
     int64_t start_time = esp_timer_get_time();
-    
+    BaseType_t high_task_awoken = pdFALSE;
+   
     for (int i = 0; i < NUM_CHANNELS; i++) {
-        int adc_reading;
-        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC_CHANNELS[i], &adc_reading));
-        xSemaphoreTake(mutex, 0);
-        adcValues[i] = adc_reading;
-        xSemaphoreGive(mutex);
+        xSemaphoreTakeFromISR(mutex, &high_task_awoken);
+        // Pour le format TYPE2, chaque échantillon est sur 4 octets
+        uint32_t adc_reading = ((uint32_t*)adc_raw)[i];
+        // Les 12 bits de poids faible contiennent la valeur ADC
+        adcValues[i] = adc_reading & 0xFFF;
+        xSemaphoreGiveFromISR(mutex, &high_task_awoken);
     }
-    
+   
+    if (high_task_awoken) {
+        portYIELD_FROM_ISR();
+    }
+
     int64_t end_time = esp_timer_get_time();
     int64_t adc_conversion_time = end_time - start_time;
-
     if (adc_conversion_time > maxTime) {
         maxTime = adc_conversion_time;
     }
@@ -67,41 +80,68 @@ static void adc_timer_callback(void* arg) {
         minTime = 1000000;
         meanTime = 0;
     }
-
-
-    //gpio_set_level(GPIO_NUM_6, 0);
 }
 
 static void adc_task(void *pvParameters) {
-    gpio_set_direction(GPIO_NUM_6, GPIO_MODE_OUTPUT);
+    esp_err_t ret;
     
-    adc_oneshot_unit_init_cfg_t init_config1;
-    init_config1.unit_id = ADC_UNIT_1;
+    adc_continuous_handle_cfg_t adc_config = {
+        .max_store_buf_size = DMA_BUFFER_SIZE,
+        .conv_frame_size = SOC_ADC_DIGI_DATA_BYTES_PER_CONV * NUM_CHANNELS,
+    };
+    ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &adc_handle));
 
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
+    adc_continuous_config_t dig_cfg = {
+        .sample_freq_hz = SAMPLE_RATE * NUM_CHANNELS,
+        .conv_mode = ADC_CONV_SINGLE_UNIT_1,
+        .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
+    };
 
+    adc_digi_pattern_config_t adc_pattern[NUM_CHANNELS];
     for (int i = 0; i < NUM_CHANNELS; i++) {
-        adc_oneshot_chan_cfg_t config;
-        config.bitwidth = ADC_BITWIDTH_12;
-        config.atten = ADC_ATTEN_DB_11;
-        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNELS[i], &config));
+        adc_pattern[i].atten = ADC_ATTEN_DB_11;
+        adc_pattern[i].channel = ADC_CHANNELS[i] & 0x7;
+        adc_pattern[i].unit = ADC_UNIT_1;
+        adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     }
+    dig_cfg.pattern_num = NUM_CHANNELS;
+    dig_cfg.adc_pattern = adc_pattern;
+    ESP_ERROR_CHECK(adc_continuous_config(adc_handle, &dig_cfg));
+
+    adc_raw = heap_caps_malloc(DMA_BUFFER_SIZE, MALLOC_CAP_DMA);
+    assert(adc_raw != NULL);
+
+    adc_continuous_evt_cbs_t cbs = {
+        .on_conv_done = adc_conv_done_cb,
+    };
+    ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(adc_handle, &cbs, xTaskGetCurrentTaskHandle()));
     
-    esp_timer_create_args_t timer_args;
-    timer_args.callback = &adc_timer_callback;
-    timer_args.name = "adc_timer";
-    timer_args.arg = NULL;
-    timer_args.dispatch_method = ESP_TIMER_TASK;
-    timer_args.skip_unhandled_events = false;
-    
+    ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
+
+    esp_timer_create_args_t timer_args = {
+        .callback = &adc_timer_callback,
+        .name = "adc_timer"
+    };
+   
     esp_timer_handle_t timer;
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(timer, 1000000 / (SAMPLE_RATE)));
-    
+    ESP_ERROR_CHECK(esp_timer_start_periodic(timer, 1000000 / SAMPLE_RATE));
+   
     while(1) {
-        vTaskDelay(portMAX_DELAY);
+        // Wait for the conversion to be done
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        uint32_t ret_num = 0;
+        ret = adc_continuous_read(adc_handle, adc_raw, DMA_BUFFER_SIZE, &ret_num, 0);
+        if (ret == ESP_OK) {
+            // Process data here if needed
+        }
+        
+        vTaskDelay(1);  // Give other tasks a chance to run
     }
 }
+
+
 
 static esp_err_t get_adc_data_handler(httpd_req_t *req) {
     cJSON *root = cJSON_CreateObject();
@@ -212,7 +252,7 @@ void app_main(void) {
     
     mutex = xSemaphoreCreateMutex();
     
-    wifi_init_sta();
+    //wifi_init_sta();
     
     xTaskCreatePinnedToCore(adc_task, "ADC Task", 4096, NULL, 5, NULL, 0);
 }

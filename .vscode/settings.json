@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "esp_netif.h": "c",
+        "adc.h": "c",
+        "adc_oneshot.h": "c",
+        "esp_adc_cal.h": "c",
+        "adc_continuous.h": "c"
+    }
+}
