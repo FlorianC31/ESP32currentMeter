@@ -4,6 +4,8 @@
         "adc.h": "c",
         "adc_oneshot.h": "c",
         "esp_adc_cal.h": "c",
-        "adc_continuous.h": "c"
+        "adc_continuous.h": "c",
+        "task.h": "c",
+        "typeinfo": "cpp"
     }
 }
