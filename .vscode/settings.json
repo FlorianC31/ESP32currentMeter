@@ -6,6 +6,7 @@
         "esp_adc_cal.h": "c",
         "adc_continuous.h": "c",
         "task.h": "c",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "chrono.h": "c"
     }
 }
