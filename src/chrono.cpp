@@ -3,7 +3,14 @@
 #include <esp_log.h>
 #include <esp_timer.h>
 
-
+/**
+ * @brief Constructor for the Chrono class.
+ *
+ * Initializes the Chrono object with a name and a print frequency.
+ *
+ * @param name The name of the Chrono object.
+ * @param printFreq The frequency at which to print the timing statistics.
+ */
 Chrono::Chrono(std::string name, int printFreq) :
     m_name("Chrono" + name),
     m_printFreq(printFreq)
@@ -11,6 +18,11 @@ Chrono::Chrono(std::string name, int printFreq) :
     init();
 }
 
+/**
+ * @brief Initializes the Chrono object.
+ *
+ * Resets the iteration count, maximum time, minimum time, and mean time.
+ */
 void Chrono::init()
 {
     m_iter = 0;
@@ -19,11 +31,22 @@ void Chrono::init()
     m_meanTime = 0;
 }
 
+/**
+ * @brief Starts a timing cycle.
+ *
+ * Records the start time of the cycle.
+ */
 void Chrono::startCycle()
 {
     m_startTime = esp_timer_get_time();
 }
 
+/**
+ * @brief Ends a timing cycle.
+ *
+ * Calculates the elapsed time since the start of the cycle, updates the
+ * timing statistics, and prints the statistics if the print frequency is reached.
+ */
 void Chrono::endCycle()
 {
     int64_t end_time = esp_timer_get_time();
@@ -44,6 +67,11 @@ void Chrono::endCycle()
     }
 }
 
+/**
+ * @brief Prints the timing statistics.
+ *
+ * Logs the minimum, maximum, and mean times of the cycles.
+ */
 void Chrono::print()
 {
     ESP_LOGI(m_name.c_str(), "min: %lld µs - max: %lld µs - mean: %lld µs", m_minTime, m_maxTime, m_meanTime);

@@ -10,7 +10,7 @@
 #include "chrono.h"
 
 #define NUM_CHANNELS 7
-#define SAMPLE_RATE 1000
+#define SAMPLE_RATE 6250
 #define DMA_BUFFER_SIZE (1024 * SOC_ADC_DIGI_DATA_BYTES_PER_CONV)
 
 void adc_task(void *pvParameters);
