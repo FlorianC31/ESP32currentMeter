@@ -13,6 +13,8 @@
 #include <cJSON.h>
 #include <esp_adc/adc_continuous.h>
 
+#include "chrono.h"
+
 #define WIFI_SSID "Livebox-Florelie"
 #define WIFI_PASS "r24hpkr2"
 
@@ -31,11 +33,7 @@ static SemaphoreHandle_t mutex;
 static uint8_t *adc_raw;
 static adc_continuous_handle_t adc_handle = NULL;
 
-static int64_t maxTime = 0;
-static int64_t minTime = 1000000;
-static int64_t meanTime = 0;
-static const int64_t nbSamples = 1000;
-static int s = 0;
+static Chrono chrono("ADC");
 
 static bool IRAM_ATTR adc_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data) {
     BaseType_t high_task_awoken = pdFALSE;
@@ -44,7 +42,7 @@ static bool IRAM_ATTR adc_conv_done_cb(adc_continuous_handle_t handle, const adc
 }
 
 static void adc_timer_callback(void* arg) {
-    int64_t start_time = esp_timer_get_time();
+    chrono.startCycle();
     BaseType_t high_task_awoken = pdFALSE;
    
     for (int i = 0; i < NUM_CHANNELS; i++) {
@@ -58,23 +56,7 @@ static void adc_timer_callback(void* arg) {
         portYIELD_FROM_ISR();
     }
 
-    int64_t end_time = esp_timer_get_time();
-    int64_t adc_conversion_time = end_time - start_time;
-    if (adc_conversion_time > maxTime) {
-        maxTime = adc_conversion_time;
-    }
-    if (adc_conversion_time < minTime) {
-        minTime = adc_conversion_time;
-    }
-    meanTime = (meanTime * s + adc_conversion_time) / (s + 1);
-    s++;
-    if (s == nbSamples) {
-        ESP_LOGI("ADC", "min time: %lld µs - max time: %lld µs - mean time: %lld µs", minTime, maxTime, meanTime);
-        s = 0;
-        maxTime = 0;
-        minTime = 1000000;
-        meanTime = 0;
-    }
+    chrono.endCycle();
 }
 
 static void adc_task(void *pvParameters) {
