@@ -21,8 +21,8 @@ static uint8_t *adc_raw;
 // Handle for the ADC continuous mode
 static adc_continuous_handle_t adc_handle = NULL;
 
-// Chrono object for timing measurements
-static Chrono chrono("ADC", SAMPLE_RATE);
+// Chrono to measure ADC convertion time
+Chrono adcChrono("ADC", SAMPLE_RATE, DEBUG);
 
 /**
  * @brief ADC conversion done callback function.
@@ -50,7 +50,7 @@ static bool IRAM_ATTR adc_conv_done_cb(adc_continuous_handle_t handle, const adc
  * @param arg Pointer to the argument passed to the timer callback.
  */
 static void adc_timer_callback(void* arg) {
-    chrono.startCycle();
+    adcChrono.startCycle();
     BaseType_t high_task_awoken = pdFALSE;
 
     for (int i = 0; i < NUM_CHANNELS; i++) {
@@ -64,7 +64,7 @@ static void adc_timer_callback(void* arg) {
         portYIELD_FROM_ISR();
     }
 
-    chrono.endCycle();
+    adcChrono.endCycle();
 }
 
 /**

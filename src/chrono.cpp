@@ -3,6 +3,7 @@
 #include <esp_log.h>
 #include <esp_timer.h>
 
+
 /**
  * @brief Constructor for the Chrono class.
  *
@@ -11,11 +12,23 @@
  * @param name The name of the Chrono object.
  * @param printFreq The frequency at which to print the timing statistics.
  */
-Chrono::Chrono(std::string name, int printFreq) :
+Chrono::Chrono(std::string name, int printFreq, bool debug) :
     m_name("Chrono" + name),
-    m_printFreq(printFreq)
+    m_debug(debug),
+    m_printFreq(printFreq),
+    m_globalStats(nullptr)
 {
+    m_globalStats = cJSON_CreateObject();
     init();
+}
+
+
+Chrono::~Chrono()
+{
+    cJSON_Delete(m_globalStats);
+    if (m_globalStats) {
+        delete m_globalStats;
+    }
 }
 
 /**
@@ -49,9 +62,9 @@ void Chrono::startCycle()
  */
 void Chrono::endCycle()
 {
-    int64_t end_time = esp_timer_get_time();
+    int end_time = esp_timer_get_time();
 
-    int64_t adc_conversion_time = end_time - m_startTime;
+    int adc_conversion_time = end_time - m_startTime;
     if (adc_conversion_time > m_maxTime) {
         m_maxTime = adc_conversion_time;
     }
@@ -59,12 +72,31 @@ void Chrono::endCycle()
         m_minTime = adc_conversion_time;
     }
     m_meanTime = (m_meanTime * m_iter + adc_conversion_time) / (m_iter + 1);
-
     m_iter++;
     if (m_iter == m_printFreq) {
-        print();
+        calcGlobal();
+        if (m_debug) {
+            print();
+        }
         init();
     }
+}
+
+/**
+ * @brief Calcul the global timing statistics (for API GET)
+ *
+ * Logs the global minimum, maximum, and mean times of the cycles.
+ */
+void Chrono::calcGlobal()
+{
+    if (m_maxTime > m_totalMaxTime) {
+        m_totalMaxTime = m_maxTime;
+    }
+    if (m_minTime < m_totalMinTime) {
+        m_totalMinTime = m_minTime;
+    }
+    m_totalMeanTime = (m_totalMeanTime * m_totalIter + m_meanTime) / (m_totalIter + 1);
+    m_totalIter++;
 }
 
 /**
@@ -74,5 +106,23 @@ void Chrono::endCycle()
  */
 void Chrono::print()
 {
-    ESP_LOGI(m_name.c_str(), "min: %lld µs - max: %lld µs - mean: %lld µs", m_minTime, m_maxTime, m_meanTime);
+    ESP_LOGI(m_name.c_str(), "min: %iµs - max: %iµs - mean: %iµs", m_minTime, m_maxTime, m_meanTime);
+}
+
+/**
+ * @brief get the global chrono statistics
+ * 
+ * @return std::string json global statistics
+ */
+std::string Chrono::getGlobalStats()
+{
+    cJSON_AddStringToObject(m_globalStats, "Chrono", m_name.c_str());
+    cJSON_AddNumberToObject(m_globalStats, "ElapsedTime(s)", m_totalIter);
+    cJSON_AddNumberToObject(m_globalStats, "min(µs)", m_totalMinTime);
+    cJSON_AddNumberToObject(m_globalStats, "mean(µs)", m_totalMeanTime);
+    cJSON_AddNumberToObject(m_globalStats, "max(µs)", m_totalMaxTime);
+
+    char *json_string = cJSON_Print(m_globalStats);
+
+    return std::string(json_string);
 }

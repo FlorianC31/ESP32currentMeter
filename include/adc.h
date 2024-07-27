@@ -1,6 +1,8 @@
 #ifndef __ADC_H
 #define __ADC_H
 
+#define DEBUG false
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
@@ -17,5 +19,8 @@ void adc_task(void *pvParameters);
 
 extern SemaphoreHandle_t mutex;
 extern volatile int adcValues[NUM_CHANNELS];
+
+// Chrono object for timing measurements
+extern Chrono adcChrono;
 
 #endif      // __ADC_H
