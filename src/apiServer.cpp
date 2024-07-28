@@ -19,7 +19,7 @@ static esp_err_t get_adc_data_handler(httpd_req_t *req) {
     cJSON *root = cJSON_CreateObject();
     
     xSemaphoreTake(mutex, portMAX_DELAY); // Prendre le mutex pour accéder aux valeurs ADC en toute sécurité
-    for (int i = 0; i < NUM_CHANNELS; i++) {
+    for (int i = 0; i < NB_CHANNELS; i++) {
         char key[8];
         snprintf(key, sizeof(key), "adc%d", i);
         cJSON_AddNumberToObject(root, key, adcValues[i]);
