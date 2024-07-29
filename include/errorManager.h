@@ -4,9 +4,6 @@
 #include <list>
 #include <string>
 
-extern ErrorManager errorManager;
-
-
 typedef enum {
     GENERIC_ERROR = 0,
     INIT_ERROR,
@@ -34,5 +31,7 @@ private:
 
     std::list<Error> m_errors;
 };
+
+extern ErrorManager errorManager;
 
 #endif      // __ERRORMANAGER_H

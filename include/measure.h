@@ -16,7 +16,6 @@
 #define DATA_SENT_PERIOD    10.   // 5. * 60.    // 5 minutes
 
 
-
 class Measure
 {
 public:

@@ -3,10 +3,11 @@
 
 
 
-Measure::Measure() :
-    m_currents(NB_CURRENTS)
-    //m_periodTimeBuffer(1024)
+Measure::Measure()
 {
+    for (uint8_t i = 0; i < NB_CURRENTS; i++) {
+        m_currents.push_back(Current(i));
+    }
     init();
 }
 
@@ -36,8 +37,8 @@ void Measure::adcCallback(uint32_t* data)
 
     m_tension.setVal(CALIB_A_COEFFS[TENSION_ID] * ((float)data[TENSION_ID] - (float)data[VREF_ID]) + CALIB_B_COEFFS[TENSION_ID]);
     
-    float czPoint;
-    float deltaT;
+    float czPoint(0.);
+    float deltaT(0.);
 
     switch(m_initState) {
         case INIT:
@@ -102,7 +103,7 @@ void Measure::adcCallback(uint32_t* data)
         
         // After 5 minutes, send the set of data through the UART and reset the data set
         if (m_totalMeasureTime > DATA_SENT_PERIOD) {
-            sendEnergyData();
+            //sendEnergyData();
             m_totalMeasureTime = 0.;
         }
     }

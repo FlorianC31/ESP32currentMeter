@@ -2,6 +2,8 @@
 
 #include <esp_log.h>
 
+ErrorManager errorManager;
+
 void ErrorManager::error(ErrorCode errorType, std::string className, std::string errorMsg)
 {
     switch(errorType){
