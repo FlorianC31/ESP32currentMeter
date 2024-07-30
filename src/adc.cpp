@@ -22,7 +22,7 @@ static uint8_t *adc_raw;
 static adc_continuous_handle_t adc_handle = NULL;
 
 // Chrono to measure ADC convertion time
-Chrono adcChrono("ADC", SAMPLE_RATE, DEBUG);
+Chrono adcChrono("ADC", 100, SAMPLE_RATE, DEBUG);
 
 /**
  * @brief ADC conversion done callback function.

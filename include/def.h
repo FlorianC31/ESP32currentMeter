@@ -11,11 +11,11 @@
 #define NB_SAMPLES      128
 #define ANALYZED_PERIOD 20.480                                  // ms (A little bit more than 1/50Hz = 20ms)
 #define NB_CURRENTS     5
-#define NB_CHANNELS     NB_CURRENTS + 2
-#define SAMPLE_RATE     1000 / ANALYZED_PERIOD * NB_SAMPLES
-#define TIM_PERIOD      ANALYZED_PERIOD * 1000 / NB_SAMPLES     // µs
-#define TENSION_ID      NB_CURRENTS + 0
-#define VREF_ID         NB_CURRENTS + 1
+#define NB_CHANNELS     (NB_CURRENTS + 2)
+#define SAMPLE_RATE     (1000 / ANALYZED_PERIOD * NB_SAMPLES)
+#define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)     // µs
+#define TENSION_ID      (NB_CURRENTS + 0)
+#define VREF_ID         (NB_CURRENTS + 1)
 
 // Network configuration
 #define WIFI_SSID "Livebox-Florelie"

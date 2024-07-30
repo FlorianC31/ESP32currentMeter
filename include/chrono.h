@@ -9,7 +9,7 @@
 class Chrono
 {
 public:
-    Chrono(std::string name, int printFreq = 1000, bool debug = false);
+    Chrono(std::string name, int limit, int printFreq = 1000, bool debug = false);
     ~Chrono();
     void startCycle();
     void endCycle();
@@ -21,6 +21,7 @@ private:
     void calcGlobal();
 
     std::string m_name;
+    int m_limit;
     bool m_debug;
     int m_printFreq;
     int m_iter = 0;
@@ -33,6 +34,7 @@ private:
     std::atomic<int> m_totalMaxTime = 0;
     std::atomic<int> m_totalMinTime = 1000000;
     std::atomic<int> m_totalMeanTime = 0;
+    std::atomic<int> m_nbOverLimit = 0;
 
     cJSON* m_globalStats;
 };

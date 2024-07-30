@@ -12,10 +12,12 @@
  * @param name The name of the Chrono object.
  * @param printFreq The frequency at which to print the timing statistics.
  */
-Chrono::Chrono(std::string name, int printFreq, bool debug) :
+Chrono::Chrono(std::string name, int limit, int printFreq, bool debug) :
     m_name("Chrono" + name),
+    m_limit(limit),
     m_debug(debug),
     m_printFreq(printFreq),
+    m_nbOverLimit(0),
     m_globalStats(nullptr)
 {
     m_globalStats = cJSON_CreateObject();
@@ -71,6 +73,9 @@ void Chrono::endCycle()
     if (adc_conversion_time < m_minTime) {
         m_minTime = adc_conversion_time;
     }
+    if (adc_conversion_time > m_limit) {
+        m_nbOverLimit++;
+    }
     m_meanTime = (m_meanTime * m_iter + adc_conversion_time) / (m_iter + 1);
     m_iter++;
     if (m_iter == m_printFreq) {
@@ -121,6 +126,7 @@ std::string Chrono::getGlobalStats()
     cJSON_AddNumberToObject(m_globalStats, "min(µs)", m_totalMinTime);
     cJSON_AddNumberToObject(m_globalStats, "mean(µs)", m_totalMeanTime);
     cJSON_AddNumberToObject(m_globalStats, "max(µs)", m_totalMaxTime);
+    cJSON_AddNumberToObject(m_globalStats, std::string("nbOver" + std::to_string(m_limit) +"µs(%)").c_str(), (float)m_nbOverLimit / (m_totalIter * m_printFreq) * 100);
 
     char *json_string = cJSON_Print(m_globalStats);
 
