@@ -1,13 +1,18 @@
 #include "apiServer.h"
 #include "adc.h"
 #include "measure.h"
+#include "ntp.h"
 
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
+#include <esp_heap_caps.h>
+
 
 // Variable volatile utilisée pour déclencher des actions en réponse aux requêtes HTTP
 static volatile bool actionFlag = false;
+
+
 
 /**
  * @brief Handler pour obtenir les données ADC via une requête HTTP GET.
@@ -43,6 +48,53 @@ static esp_err_t get_adc_chrono_handler(httpd_req_t *req) {
     std::string json_string = adcChrono.getGlobalStats();
     //xSemaphoreGive(mutex); // Libérer le mutex
     
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_string.c_str(), json_string.length());
+
+    return ESP_OK;
+}
+
+
+
+static esp_err_t get_memory_handler(httpd_req_t *req) {
+
+    cJSON *json = cJSON_CreateObject();
+
+    multi_heap_info_t info;
+    heap_caps_get_info(&info, MALLOC_CAP_DEFAULT);
+
+    cJSON_AddNumberToObject(json, "Total heap size (kB)", float(info.total_free_bytes + info.total_allocated_bytes) / 1000.);
+    cJSON_AddNumberToObject(json, "Free heap size (kB)", float(info.total_free_bytes) / 1000.);
+    cJSON_AddNumberToObject(json, "Allocated heap size (kB)", float(info.total_allocated_bytes) / 1000.);
+    cJSON_AddNumberToObject(json, "Minimum free heap size (kB)", float(info.minimum_free_bytes) / 1000.);
+
+    std::string json_string = cJSON_Print(json);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_string.c_str(), json_string.length());
+
+    return ESP_OK;
+}
+
+static esp_err_t get_time_handler(httpd_req_t *req) {
+
+    cJSON *json = cJSON_CreateObject();
+
+    time_t now = get_timestamp();
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+
+    char buffer[100];
+
+    // Formater la chaîne dans le tampon
+    snprintf(buffer, sizeof(buffer), "Current time: %02d:%02d:%02d %02d/%02d/%04d",
+             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+             timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+
+    cJSON_AddStringToObject(json, "Datetime", buffer);
+
+    std::string json_string = cJSON_Print(json);
+
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json_string.c_str(), json_string.length());
 
@@ -92,6 +144,22 @@ static httpd_handle_t start_webserver(void) {
         };
         httpd_register_uri_handler(server, &uri_getAdcChrono);
         
+        httpd_uri_t uri_getMemory = {
+            .uri      = "/api/memory",
+            .method   = HTTP_GET,
+            .handler  = get_memory_handler,
+            .user_ctx = NULL
+        };
+        httpd_register_uri_handler(server, &uri_getMemory);
+        
+        httpd_uri_t uri_getTime = {
+            .uri      = "/api/time",
+            .method   = HTTP_GET,
+            .handler  = get_time_handler,
+            .user_ctx = NULL
+        };
+        httpd_register_uri_handler(server, &uri_getTime);
+
         httpd_uri_t uri_post = {
             .uri      = "/api/action",
             .method   = HTTP_POST,
@@ -123,6 +191,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI("WiFi", "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
         start_webserver();
+        ntpSyncTime();
     }
 }
 
