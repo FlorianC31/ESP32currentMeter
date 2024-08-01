@@ -223,7 +223,7 @@ void Current::calcSample(float deltaT, bool lastSample)
         // For the last sample, energy is not updated since U is considered as nul
     }
     else {
-        m_energy += m_val * I;
+        m_energy += m_val * I * TIM_PERIOD / 3600;      // The energy is in Wh
     }
 
     if (m_val > m_maxVal) {
@@ -239,7 +239,7 @@ cJSON* Current::getData()
 {
     cJSON_AddItemToObject(m_data, "RMS(A)", m_rms.getData());
     cJSON_AddItemToObject(m_data, "Range(A)", Signal::getData());
-    cJSON_AddNumberToObject(m_data, "Energy(W)", m_energy);
+    cJSON_AddNumberToObject(m_data, "Energy(W.h)", m_energy);
 
     return m_data;
 }
