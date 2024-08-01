@@ -57,5 +57,6 @@
         "streambuf": "cpp",
         "cinttypes": "cpp",
         "list": "cpp"
-    }
+    },
+    "sonarlint.pathToCompileCommands": "${workspaceFolder}\\.pio\\build\\esp32-s3-devkitc-1\\bootloader\\compile_commands.json"
 }

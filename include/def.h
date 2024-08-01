@@ -5,7 +5,7 @@
 #define UNUSED (void)
 #endif
 
-
+#define DEL_OBJ(x) if(x) {delete x;x=nullptr;}
 
 // ADC configuration
 #define NB_SAMPLES      128

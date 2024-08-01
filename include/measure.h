@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <vector>
+#include <string>
 
 #include "def.h"
 #include "signals.h"
@@ -20,10 +21,10 @@ class Measure
 {
 public:
     Measure();
-    ~Measure() {}
+    ~Measure();
     void init();
     void adcCallback(uint32_t* data);
-
+    std::string getData();
 
 private:
     typedef enum {
@@ -38,8 +39,11 @@ private:
     float m_timerPeriod;
     float m_totalMeasureTime;
     float m_periodTime;
+    cJSON* m_data;
     //uint16_t m_iPeriodTimeBuffer;
     //std::vector<float> m_periodTimeBuffer;
 };
+
+extern Measure measure;
 
 #endif      // __MEASURE_H

@@ -35,8 +35,6 @@ private:
     std::atomic<int> m_totalMinTime = 1000000;
     std::atomic<int> m_totalMeanTime = 0;
     std::atomic<int> m_nbOverLimit = 0;
-
-    cJSON* m_globalStats;
 };
 
 #endif  // __CHRONO_H

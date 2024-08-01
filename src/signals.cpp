@@ -6,62 +6,17 @@
 #include "errorManager.h"
 
 
-Tension::Tension() :
-    Signal(TENSION_ID)
+Rms::Rms() :
+    m_data(nullptr)
 {
+    m_data = cJSON_CreateObject();
     init();
 }
 
-void Tension::init()
+Rms::~Rms()
 {
-    Signal::init();
-    m_freqMean = 0.;
-    m_freqMin = 999999.;
-    m_freqMax = 0.;
+    cJSON_Delete(m_data);
 }
-
-Current::Current(u_int8_t adcChannel) :
-    Signal(adcChannel)
-{
-    init();
-}
-
-void Current::init()
-{
-    Signal::init();
-    m_energy = 0.;
-}
-
-
-Signal::Signal(uint8_t adcChannel) :
-    m_buffer(NB_SAMPLES),
-    m_iBuffer(0),
-    m_adcChannel(adcChannel),
-    m_calibCoeffA(CALIB_A_COEFFS[adcChannel]),
-    m_calibCoeffB(CALIB_B_COEFFS[adcChannel])
-{}
-
-void Signal::init()
-{
-    m_val = 0.;
-    m_prevVal = 0.;
-    m_maxVal = -999999;
-    m_minVal = 999999.;
-    m_rms.init();
-}
-
-void Signal::setVal(float val)
-{
-    m_prevVal = m_val;
-    m_val = val;
-
-    m_buffer[m_iBuffer] = val;
-    m_iBuffer++;
-    if (m_iBuffer == NB_SAMPLES) {
-        m_iBuffer = 0;
-    }
-}
-
 
 void Rms::init()
 {
@@ -91,6 +46,94 @@ void Rms::update(float val, float deltaT)
 }
 
 
+cJSON* Rms::getData()
+{
+    cJSON_AddNumberToObject(m_data, "min", m_min);
+    cJSON_AddNumberToObject(m_data, "mean", m_mean);
+    cJSON_AddNumberToObject(m_data, "max", m_max);
+
+    return m_data;
+}
+
+
+
+Signal::Signal() :
+    m_buffer(NB_SAMPLES),
+    m_iBuffer(0),
+    m_adcChannel(0),
+    m_calibCoeffA(0),
+    m_calibCoeffB(0),
+    m_data(nullptr)
+{
+    m_data = cJSON_CreateObject();
+}
+
+Signal::~Signal()
+{
+    cJSON_Delete(m_data);
+}
+
+void Signal::setChannelId(uint8_t adcChannel)
+{
+    m_adcChannel = adcChannel;
+    m_calibCoeffA = CALIB_A_COEFFS[adcChannel];
+    m_calibCoeffB = CALIB_B_COEFFS[adcChannel];
+}
+
+void Signal::init()
+{
+    m_val = 0.;
+    m_prevVal = 0.;
+    m_maxVal = -999999;
+    m_minVal = 999999.;
+    m_rms.init();
+}
+
+void Signal::setVal(float val)
+{
+    m_prevVal = m_val;
+    m_val = val;
+
+    m_buffer[m_iBuffer] = val;
+    m_iBuffer++;
+    if (m_iBuffer == NB_SAMPLES) {
+        m_iBuffer = 0;
+    }
+}
+
+cJSON* Signal::getData()
+{
+    cJSON_AddNumberToObject(m_data, "min", m_minVal);
+    cJSON_AddNumberToObject(m_data, "max", m_maxVal);
+
+    return m_data;
+}
+
+
+Tension::Tension() :
+    m_data(nullptr),
+    m_freqData(nullptr)
+{
+    setChannelId(TENSION_ID);
+    m_data = cJSON_CreateObject();
+    m_freqData = cJSON_CreateObject();
+    init();
+}
+
+Tension::~Tension()
+{
+    cJSON_Delete(m_freqData);
+    cJSON_Delete(m_data);
+}
+
+void Tension::init()
+{
+    Signal::init();
+    m_freqMean = 0.;
+    m_freqMin = 999999.;
+    m_freqMax = 0.;
+}
+
 void Tension::calcPeriod(float periodTime, float totalMeasureTime)
 {
     float freq = 1. / periodTime;
@@ -103,7 +146,6 @@ void Tension::calcPeriod(float periodTime, float totalMeasureTime)
     m_freqMean = (m_freqMean * totalMeasureTime + freq * periodTime) / (totalMeasureTime + periodTime);
     m_rms.save(periodTime, totalMeasureTime);
 }
-
 
 bool Tension::isCrossingZero(float* czPoint)
 {
@@ -124,7 +166,6 @@ bool Tension::isCrossingZero(float* czPoint)
     }
 }
 
-
 void Tension::calcSample(float deltaT, bool lastSample)
 {
     if (!lastSample) {
@@ -136,6 +177,38 @@ void Tension::calcSample(float deltaT, bool lastSample)
         }
         m_rms.update(m_val, deltaT);
     }
+}
+
+cJSON* Tension::getData()
+{    
+    cJSON_AddNumberToObject(m_freqData, "min", m_freqMin);
+    cJSON_AddNumberToObject(m_freqData, "mean", m_freqMean);
+    cJSON_AddNumberToObject(m_freqData, "max", m_freqMax);
+
+    cJSON_AddItemToObject(m_data, "RMS(V)", m_rms.getData());
+    cJSON_AddItemToObject(m_data, "Range(V)", Signal::getData());
+    cJSON_AddItemToObject(m_data, "Frequency(Hz)", m_freqData);
+
+    return m_data;
+}
+
+
+Current::Current() :
+    m_data(nullptr)
+{
+    m_data = cJSON_CreateObject();
+    init();
+}
+
+Current::~Current()
+{
+    cJSON_Delete(m_data);
+}
+
+void Current::init()
+{
+    Signal::init();
+    m_energy = 0.;
 }
 
 void Current::calcSample(float deltaT, bool lastSample)
@@ -160,4 +233,13 @@ void Current::calcSample(float deltaT, bool lastSample)
         m_minVal = m_val;
     }
     m_rms.update(I, deltaT);
+}
+
+cJSON* Current::getData()
+{
+    cJSON_AddItemToObject(m_data, "RMS(A)", m_rms.getData());
+    cJSON_AddItemToObject(m_data, "Range(A)", Signal::getData());
+    cJSON_AddNumberToObject(m_data, "Energy(W)", m_energy);
+
+    return m_data;
 }

@@ -1,5 +1,6 @@
 #include "apiServer.h"
 #include "adc.h"
+#include "measure.h"
 
 #include "esp_netif.h"
 #include "esp_wifi.h"
@@ -16,22 +17,13 @@ static volatile bool actionFlag = false;
  * @return esp_err_t ESP_OK si la requête est traitée avec succès.
  */
 static esp_err_t get_adc_data_handler(httpd_req_t *req) {
-    cJSON *root = cJSON_CreateObject();
     
-    xSemaphoreTake(mutex, portMAX_DELAY); // Prendre le mutex pour accéder aux valeurs ADC en toute sécurité
-    for (int i = 0; i < NB_CHANNELS; i++) {
-        char key[8];
-        snprintf(key, sizeof(key), "adc%d", i);
-        cJSON_AddNumberToObject(root, key, adcValues[i]);
-    }
-    xSemaphoreGive(mutex); // Libérer le mutex
+    //xSemaphoreTake(mutex, portMAX_DELAY); // Prendre le mutex pour accéder aux valeurs ADC en toute sécurité
+    std::string json_string = measure.getData();
+    //xSemaphoreGive(mutex); // Libérer le mutex
     
-    char *json_string = cJSON_Print(root);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, json_string, strlen(json_string));
-    
-    free(json_string);
-    cJSON_Delete(root);
+    httpd_resp_send(req, json_string.c_str(), json_string.length());
     
     return ESP_OK;
 }
@@ -44,10 +36,16 @@ static esp_err_t get_adc_data_handler(httpd_req_t *req) {
  * @return esp_err_t ESP_OK si la requête est traitée avec succès.
  */
 static esp_err_t get_adc_chrono_handler(httpd_req_t *req) {
-    std::string adcStats = adcChrono.getGlobalStats();
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, adcStats.c_str(), strlen(adcStats.c_str()));
+
+    //xSemaphoreTake(mutex, portMAX_DELAY); // Prendre le mutex pour accéder aux valeurs ADC en toute sécurité
     
+    
+    std::string json_string = adcChrono.getGlobalStats();
+    //xSemaphoreGive(mutex); // Libérer le mutex
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_string.c_str(), json_string.length());
+
     return ESP_OK;
 }
 

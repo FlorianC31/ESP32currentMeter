@@ -1,4 +1,5 @@
 #include "chrono.h"
+#include "def.h"
 
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -17,21 +18,14 @@ Chrono::Chrono(std::string name, int limit, int printFreq, bool debug) :
     m_limit(limit),
     m_debug(debug),
     m_printFreq(printFreq),
-    m_nbOverLimit(0),
-    m_globalStats(nullptr)
+    m_nbOverLimit(0)
 {
-    m_globalStats = cJSON_CreateObject();
     init();
 }
 
 
 Chrono::~Chrono()
-{
-    cJSON_Delete(m_globalStats);
-    if (m_globalStats) {
-        delete m_globalStats;
-    }
-}
+{}
 
 /**
  * @brief Initializes the Chrono object.
@@ -121,14 +115,18 @@ void Chrono::print()
  */
 std::string Chrono::getGlobalStats()
 {
-    cJSON_AddStringToObject(m_globalStats, "Chrono", m_name.c_str());
-    cJSON_AddNumberToObject(m_globalStats, "ElapsedTime(s)", m_totalIter);
-    cJSON_AddNumberToObject(m_globalStats, "min(µs)", m_totalMinTime);
-    cJSON_AddNumberToObject(m_globalStats, "mean(µs)", m_totalMeanTime);
-    cJSON_AddNumberToObject(m_globalStats, "max(µs)", m_totalMaxTime);
-    cJSON_AddNumberToObject(m_globalStats, std::string("nbOver" + std::to_string(m_limit) +"µs(%)").c_str(), (float)m_nbOverLimit / (m_totalIter * m_printFreq) * 100);
 
-    char *json_string = cJSON_Print(m_globalStats);
+    cJSON *json = cJSON_CreateObject();
 
-    return std::string(json_string);
+    cJSON_AddStringToObject(json, "Chrono", m_name.c_str());
+    cJSON_AddNumberToObject(json, "ElapsedTime(s)", m_totalIter);
+    cJSON_AddNumberToObject(json, "min(µs)", m_totalMinTime);
+    cJSON_AddNumberToObject(json, "mean(µs)", m_totalMeanTime);
+    cJSON_AddNumberToObject(json, "max(µs)", m_totalMaxTime);
+    cJSON_AddNumberToObject(json, std::string("nbOver" + std::to_string(m_limit) +"µs(%)").c_str(), (float)m_nbOverLimit / (m_totalIter * m_printFreq) * 100);
+
+    std::string globalStats = cJSON_Print(json);
+    cJSON_Delete(json); 
+
+    return globalStats;
 }

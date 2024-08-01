@@ -1,16 +1,23 @@
 #include "measure.h"
 #include "errorManager.h"
 
+Measure measure;
 
-
-Measure::Measure()
+Measure::Measure() :
+    m_currents(NB_CURRENTS),
+    m_data(nullptr)
 {
+    m_data = cJSON_CreateObject();
     for (uint8_t i = 0; i < NB_CURRENTS; i++) {
-        m_currents.push_back(Current(i));
+        m_currents[i].setChannelId(i);
     }
     init();
 }
 
+Measure::~Measure()
+{
+    cJSON_Delete(m_data);
+}
 
 void Measure::init()
 {
@@ -121,15 +128,14 @@ void Measure::adcCallback(uint32_t* data)
 }
 
 
-
-
-
-
-void sendEnergyData()
+std::string Measure::getData()
 {
-    bool stop = true;
-    UNUSED(stop);
+    cJSON_AddNumberToObject(m_data, "TotalMeasureTime(s)", m_totalMeasureTime);
+    cJSON_AddItemToObject(m_data, "Tension", m_tension.getData());
+
+    for (uint8_t i = 0; i < NB_CURRENTS; i++) {
+        cJSON_AddItemToObject(m_data, std::string("Current" + std::to_string(i)).c_str(), m_currents[i].getData());
+    }
+
+    return std::string(cJSON_Print(m_data));
 }
-
-
-
