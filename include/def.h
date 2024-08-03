@@ -23,6 +23,9 @@
 #define IP_ADDRESS "192.168.1.24"
 #define NETMASK "255.255.255.0"
 #define GATEWAY "192.168.1.1"
+#define DNS_SERVER "8.8.8.8"
+
+#define TIMEZONE "CET-1CEST,M3.5.0,M10.5.0/3"
 
 // Robustness protections
 #define MIN_AC_FREQ   40.          // Hz

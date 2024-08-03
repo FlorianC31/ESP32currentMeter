@@ -220,6 +220,15 @@ void wifi_init_sta(void) {
     
     // Configure les informations IP
     ESP_ERROR_CHECK(esp_netif_set_ip_info(sta_netif, &ip_info));
+
+    // Add DNS configuration
+    esp_netif_dns_info_t dns_info = {};
+    esp_ip4_addr_t dns_server;
+    ESP_ERROR_CHECK(esp_netif_str_to_ip4(DNS_SERVER, &dns_server));  // Google's DNS server: 8.8.8.8
+    dns_info.ip.u_addr.ip4 = dns_server;
+    dns_info.ip.type = ESP_IPADDR_TYPE_V4;
+    ESP_ERROR_CHECK(esp_netif_set_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &dns_info));
+   
     
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
