@@ -5,7 +5,8 @@
 #include "nvs_flash.h"
 
 #include "adc.h"
-#include "apiServer.h"
+#include "wifi.h"
+#include "measure.h"
 
 
 extern "C" void app_main(void) {
@@ -21,4 +22,7 @@ extern "C" void app_main(void) {
     wifi_init_sta();
     
     xTaskCreatePinnedToCore(adc_task, "ADC Task", 4096, NULL, 5, NULL, 0);
+
+    start_webserver();
+    
 }

@@ -1,4 +1,4 @@
-#include "apiServer.h"
+#include "wifi.h"
 #include "adc.h"
 #include "measure.h"
 #include "ntp.h"
@@ -22,11 +22,7 @@ static volatile bool actionFlag = false;
  * @return esp_err_t ESP_OK si la requête est traitée avec succès.
  */
 static esp_err_t get_adc_data_handler(httpd_req_t *req) {
-    
-    //xSemaphoreTake(mutex, portMAX_DELAY); // Prendre le mutex pour accéder aux valeurs ADC en toute sécurité
-    std::string json_string = measure.getData();
-    //xSemaphoreGive(mutex); // Libérer le mutex
-    
+    std::string json_string = measure.getJson();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json_string.c_str(), json_string.length());
     
@@ -123,7 +119,7 @@ static esp_err_t trigger_action_handler(httpd_req_t *req) {
  * Cette fonction configure et démarre le serveur web, et enregistre les handlers pour les URI.
  * @return httpd_handle_t Handle du serveur web, ou NULL si le démarrage échoue.
  */
-static httpd_handle_t start_webserver(void) {
+httpd_handle_t start_webserver(void) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     httpd_handle_t server = NULL;
     
@@ -190,7 +186,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI("WiFi", "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
-        start_webserver();
         ntpSyncTime();
     }
 }

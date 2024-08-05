@@ -17,6 +17,9 @@
 #define TENSION_ID      (NB_CURRENTS + 0)
 #define VREF_ID         (NB_CURRENTS + 1)
 
+// Measure configuration
+#define MEASURE_PACKET_PERIOD   (5 * 60)             // 5 minutes in seconds
+
 // Network configuration
 #define WIFI_SSID "Livebox-Florelie"
 #define WIFI_PASS "r24hpkr2"

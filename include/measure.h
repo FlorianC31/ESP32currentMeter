@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <vector>
 #include <string>
+#include <queue>
+#include <mutex>
 
 #include "def.h"
 #include "signals.h"
@@ -14,19 +16,31 @@
 #define ADC_BITS            12.
 #define ADC_COEFF_A         (500. / pow(2., ADC_BITS))
 #define ADC_COEFF_B         127.
-#define DATA_SENT_PERIOD    10.   // 5. * 60.    // 5 minutes
 
 
 class Measure
 {
 public:
+    struct Data {
+        time_t timestamp;
+        float duration;
+        Tension::Data tension;
+        Current::Data currents[NB_CURRENTS];
+    };
+
     Measure();
     ~Measure();
     void init();
     void adcCallback(uint32_t* data);
-    std::string getData();
+    std::string getJsonOld();
+    std::string getJson();
+    void packetTask();
+    bool popFromQueue(Data &data);
+
 
 private:
+
+    void save();
     typedef enum {
         INIT = 0,
         WAITING_ZC,
@@ -40,10 +54,15 @@ private:
     float m_totalMeasureTime;
     float m_periodTime;
     cJSON* m_data;
+    std::queue<Data> m_fifo;
+    std::mutex m_queueMutex;
+    cJSON* serializeData(Data &data);
     //uint16_t m_iPeriodTimeBuffer;
     //std::vector<float> m_periodTimeBuffer;
 };
 
 extern Measure measure;
+
+void packeting_task(void *pvParameters);
 
 #endif      // __MEASURE_H

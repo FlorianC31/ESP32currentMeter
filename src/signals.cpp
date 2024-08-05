@@ -6,16 +6,9 @@
 #include "errorManager.h"
 
 
-Rms::Rms() :
-    m_data(nullptr)
+Rms::Rms()
 {
-    m_data = cJSON_CreateObject();
     init();
-}
-
-Rms::~Rms()
-{
-    cJSON_Delete(m_data);
 }
 
 void Rms::init()
@@ -46,13 +39,15 @@ void Rms::update(float val, float deltaT)
 }
 
 
-cJSON* Rms::getData()
+cJSON* Rms::getJson()
 {
-    cJSON_AddNumberToObject(m_data, "min", m_min);
-    cJSON_AddNumberToObject(m_data, "mean", m_mean);
-    cJSON_AddNumberToObject(m_data, "max", m_max);
+    cJSON* data = cJSON_CreateObject();
 
-    return m_data;
+    cJSON_AddNumberToObject(data, "min", m_min);
+    cJSON_AddNumberToObject(data, "mean", m_mean);
+    cJSON_AddNumberToObject(data, "max", m_max);
+
+    return data;
 }
 
 
@@ -62,16 +57,9 @@ Signal::Signal() :
     m_iBuffer(0),
     m_adcChannel(0),
     m_calibCoeffA(0),
-    m_calibCoeffB(0),
-    m_data(nullptr)
-{
-    m_data = cJSON_CreateObject();
-}
+    m_calibCoeffB(0)
+{}
 
-Signal::~Signal()
-{
-    cJSON_Delete(m_data);
-}
 
 void Signal::setChannelId(uint8_t adcChannel)
 {
@@ -101,29 +89,32 @@ void Signal::setVal(float val)
     }
 }
 
-cJSON* Signal::getData()
+cJSON* Signal::getJson()
 {
-    cJSON_AddNumberToObject(m_data, "min", m_minVal);
-    cJSON_AddNumberToObject(m_data, "max", m_maxVal);
+    cJSON* data = cJSON_CreateObject();
 
-    return m_data;
+    cJSON_AddNumberToObject(data, "min", m_minVal);
+    cJSON_AddNumberToObject(data, "max", m_maxVal);
+
+    return data;
 }
 
 
-Tension::Tension() :
-    m_data(nullptr),
-    m_freqData(nullptr)
+cJSON* Signal::serializeData(RangeData &data)
+{
+    cJSON* jsonData = cJSON_CreateObject();
+    cJSON_AddNumberToObject(jsonData, "min", data.min);
+    cJSON_AddNumberToObject(jsonData, "mean", data.mean);
+    cJSON_AddNumberToObject(jsonData, "max", data.max);
+
+    return jsonData;
+}
+
+
+Tension::Tension()
 {
     setChannelId(TENSION_ID);
-    m_data = cJSON_CreateObject();
-    m_freqData = cJSON_CreateObject();
     init();
-}
-
-Tension::~Tension()
-{
-    cJSON_Delete(m_freqData);
-    cJSON_Delete(m_data);
 }
 
 void Tension::init()
@@ -179,30 +170,38 @@ void Tension::calcSample(float deltaT, bool lastSample)
     }
 }
 
-cJSON* Tension::getData()
+cJSON* Tension::getJson()
 {    
-    cJSON_AddNumberToObject(m_freqData, "min", m_freqMin);
-    cJSON_AddNumberToObject(m_freqData, "mean", m_freqMean);
-    cJSON_AddNumberToObject(m_freqData, "max", m_freqMax);
+    cJSON* freqData = cJSON_CreateObject();
+    cJSON_AddNumberToObject(freqData, "min", m_freqMin);
+    cJSON_AddNumberToObject(freqData, "mean", m_freqMean);
+    cJSON_AddNumberToObject(freqData, "max", m_freqMax);
 
-    cJSON_AddItemToObject(m_data, "RMS(V)", m_rms.getData());
-    cJSON_AddItemToObject(m_data, "Range(V)", Signal::getData());
-    cJSON_AddItemToObject(m_data, "Frequency(Hz)", m_freqData);
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddItemToObject(data, "RMS(V)", m_rms.getJson());
+    cJSON_AddItemToObject(data, "range(V)", Signal::getJson());
+    cJSON_AddItemToObject(data, "frequency(Hz)", freqData);
 
-    return m_data;
+    return data;
+}
+
+cJSON* Tension::serializeData(Tension::Data &data)
+{
+    cJSON* jsonData = cJSON_CreateObject();
+    cJSON_AddItemToObject(jsonData, "RMS(V)", Signal::serializeData(data.rms));
+    cJSON_AddItemToObject(jsonData, "range(V)", Signal::serializeData(data.range));
+    cJSON_AddItemToObject(jsonData, "frequency(Hz)", Signal::serializeData(data.freq));
+
+    return jsonData;
 }
 
 
-Current::Current() :
-    m_data(nullptr)
+
+
+
+Current::Current()
 {
-    m_data = cJSON_CreateObject();
     init();
-}
-
-Current::~Current()
-{
-    cJSON_Delete(m_data);
 }
 
 void Current::init()
@@ -235,11 +234,22 @@ void Current::calcSample(float deltaT, bool lastSample)
     m_rms.update(I, deltaT);
 }
 
-cJSON* Current::getData()
+cJSON* Current::getJson()
 {
-    cJSON_AddItemToObject(m_data, "RMS(A)", m_rms.getData());
-    cJSON_AddItemToObject(m_data, "Range(A)", Signal::getData());
-    cJSON_AddNumberToObject(m_data, "Energy(W.h)", m_energy);
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddItemToObject(data, "RMS(A)", m_rms.getJson());
+    cJSON_AddItemToObject(data, "Range(A)", Signal::getJson());
+    cJSON_AddNumberToObject(data, "Energy(W.h)", m_energy);
 
-    return m_data;
+    return data;
+}
+
+cJSON* Current::serializeData(Current::Data &data)
+{
+    cJSON* jsonData = cJSON_CreateObject();
+    cJSON_AddItemToObject(jsonData, "RMS(A)", Signal::serializeData(data.rms));
+    cJSON_AddItemToObject(jsonData, "Range(A)", Signal::serializeData(data.range));
+    cJSON_AddNumberToObject(jsonData, "Energy(W.h)", data.energy);
+
+    return jsonData;
 }
