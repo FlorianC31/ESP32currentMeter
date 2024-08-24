@@ -1,10 +1,36 @@
-#include "adc.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+
+#include <esp_timer.h>
+#include <esp_adc/adc_continuous.h>
+
+#include <esp_system.h>
+#include "nvs_flash.h"
+#include <string>
+#include <esp_log.h>
+
+#define DMA_BUFFER_SIZE (1024 * SOC_ADC_DIGI_DATA_BYTES_PER_CONV)
+
+
+// ADC configuration
+#define NB_SAMPLES      128
+#define ANALYZED_PERIOD 20.480                                  // ms (A little bit more than 1/50Hz = 20ms)
+#define NB_CURRENTS     5
+#define NB_CHANNELS     (NB_CURRENTS + 2)
+#define SAMPLE_RATE     (1000 / ANALYZED_PERIOD * NB_SAMPLES)
+#define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)     // µs
+#define TENSION_ID      (NB_CURRENTS + 0)
+#define VREF_ID         (NB_CURRENTS + 1)
 
 // Mutex for synchronizing access to shared resources
 SemaphoreHandle_t mutex = nullptr;
 
 // Array to store ADC values for each channel
 volatile int adcValues[NB_CHANNELS] = {0};
+
+std::string buffer("");
+uint16_t iBuffer(0);
 
 // Array of ADC channels to be sampled
 static const adc_channel_t ADC_CHANNELS[NB_CHANNELS] = {
@@ -21,8 +47,6 @@ static uint8_t *adc_raw;
 // Handle for the ADC continuous mode
 static adc_continuous_handle_t adc_handle = NULL;
 
-// Chrono to measure ADC convertion time
-Chrono adcChrono("ADC", 100, SAMPLE_RATE, DEBUG);
 
 /**
  * @brief ADC conversion done callback function.
@@ -50,7 +74,6 @@ static bool IRAM_ATTR adc_conv_done_cb(adc_continuous_handle_t handle, const adc
  * @param arg Pointer to the argument passed to the timer callback.
  */
 static void adc_timer_callback(void* arg) {
-    adcChrono.startCycle();
     BaseType_t high_task_awoken = pdFALSE;
 
     for (int i = 0; i < NB_CHANNELS; i++) {
@@ -60,11 +83,18 @@ static void adc_timer_callback(void* arg) {
         xSemaphoreGiveFromISR(mutex, &high_task_awoken);
     }
 
+
+        buffer += std::to_string(adcValues[TENSION_ID]) + ";";
+        iBuffer++;
+    
+
+    if (iBuffer == (NB_SAMPLES * 4)) {
+        ESP_LOGI("Buffer", "Tension : %s", buffer.c_str());
+    }
+ 
     if (high_task_awoken) {
         portYIELD_FROM_ISR();
     }
-
-    adcChrono.endCycle();
 }
 
 /**
@@ -130,4 +160,17 @@ void adc_task(void *pvParameters) {
 
         vTaskDelay(1);
     }
+}
+
+
+extern "C" void app_main(void) {
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+    
+    mutex = xSemaphoreCreateMutex();
+    xTaskCreatePinnedToCore(adc_task, "ADC Task", 4096, NULL, 5, NULL, 0);    
 }

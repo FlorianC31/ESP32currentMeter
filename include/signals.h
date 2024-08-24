@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <vector>
 #include <cJSON.h>
+#include <string>
 
 
 struct RangeData {
@@ -39,11 +40,13 @@ public:
     ~Signal() {};
     virtual void init();
     void setChannelId(uint8_t adcChannel);
-    void setVal(float val);
+    void setVal(float val, float rawVal);
     float getVal() {return m_val;}
     virtual cJSON* getJson();
+    cJSON* getBufferJson();
     static cJSON* serializeData(RangeData &data);
     RangeData getData() {return RangeData({m_minVal, m_maxVal, 0.});}
+    void printBuffer(std::string name);
 
 protected:
     float m_val;
@@ -51,7 +54,10 @@ protected:
     float m_maxVal;
     float m_minVal;
     Rms m_rms;
-    std::vector<float> m_buffer;
+    std::vector<float> m_buffer1;
+    std::vector<float> m_buffer2;
+    std::vector<float>* m_currentBufferPtr;
+    std::vector<float>* m_lastBufferPtr;
     uint16_t m_iBuffer;
     uint8_t m_adcChannel;
     float m_calibCoeffA;

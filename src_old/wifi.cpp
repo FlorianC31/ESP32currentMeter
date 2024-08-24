@@ -51,6 +51,16 @@ static esp_err_t get_adc_chrono_handler(httpd_req_t *req) {
 }
 
 
+static esp_err_t get_adc_buffer_handler(httpd_req_t *req) {
+
+    std::string json_string = measure.getBufferJson();
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_string.c_str(), json_string.length());
+
+    return ESP_OK;
+}
+
 
 static esp_err_t get_memory_handler(httpd_req_t *req) {
 
@@ -139,6 +149,14 @@ httpd_handle_t start_webserver(void) {
             .user_ctx = NULL
         };
         httpd_register_uri_handler(server, &uri_getAdcChrono);
+
+        httpd_uri_t uri_getAdcBuffer = {
+            .uri      = "/api/adc/buffer",
+            .method   = HTTP_GET,
+            .handler  = get_adc_buffer_handler,
+            .user_ctx = NULL
+        };
+        httpd_register_uri_handler(server, &uri_getAdcBuffer);
         
         httpd_uri_t uri_getMemory = {
             .uri      = "/api/memory",

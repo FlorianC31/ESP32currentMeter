@@ -5,6 +5,7 @@
 #include "adc.h"
 #include "errorManager.h"
 
+#include <esp_log.h>
 
 Rms::Rms()
 {
@@ -53,7 +54,10 @@ cJSON* Rms::getJson()
 
 
 Signal::Signal() :
-    m_buffer(NB_SAMPLES),
+    m_buffer1(NB_SAMPLES),
+    m_buffer2(NB_SAMPLES),
+    m_currentBufferPtr(&m_buffer1),
+    m_lastBufferPtr(&m_buffer2),
     m_iBuffer(0),
     m_adcChannel(0),
     m_calibCoeffA(0),
@@ -77,15 +81,18 @@ void Signal::init()
     m_rms.init();
 }
 
-void Signal::setVal(float val)
+void Signal::setVal(float val, float rawVal)
 {
     m_prevVal = m_val;
     m_val = val;
 
-    m_buffer[m_iBuffer] = val;
+    (*m_currentBufferPtr)[m_iBuffer] = rawVal;
     m_iBuffer++;
     if (m_iBuffer == NB_SAMPLES) {
         m_iBuffer = 0;
+        std::vector<float>* tempBufferPtr(m_lastBufferPtr);
+        m_lastBufferPtr = m_currentBufferPtr;
+        m_currentBufferPtr = tempBufferPtr;
     }
 }
 
@@ -95,6 +102,17 @@ cJSON* Signal::getJson()
 
     cJSON_AddNumberToObject(data, "min", m_minVal);
     cJSON_AddNumberToObject(data, "max", m_maxVal);
+
+    return data;
+}
+
+cJSON* Signal::getBufferJson()
+{
+    cJSON* data = cJSON_CreateArray();
+
+    for (float &val : (*m_lastBufferPtr)) {
+        cJSON_AddItemToArray(data, cJSON_CreateNumber(val));
+    }
 
     return data;
 }
@@ -195,6 +213,14 @@ cJSON* Tension::serializeData(Tension::Data &data)
     return jsonData;
 }
 
+void Signal::printBuffer(std::string name)
+{
+    std::string valuesTxt = "";
+    for (float &val : (*m_lastBufferPtr)) {
+        valuesTxt += std::to_string(val) + ";";
+    }
+    ESP_LOGI(name.c_str(), "Buffer : %s", valuesTxt.c_str());
+}
 
 
 
@@ -214,6 +240,7 @@ void Current::calcSample(float deltaT, bool lastSample)
 {
     m_prevVal = m_val;
     m_val = m_calibCoeffA * ((float)adcValues[m_adcChannel] - (float)adcValues[VREF_ID]) + m_calibCoeffB;
+    setVal(m_val, (float)adcValues[m_adcChannel]);
     float I = m_val;
 
     if (lastSample) {

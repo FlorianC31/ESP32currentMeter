@@ -6,12 +6,14 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <esp_timer.h>
+#include <esp_log.h>
 
 Measure measure;
 
 Measure::Measure() :
     m_currents(NB_CURRENTS),
-    m_data(nullptr)
+    m_data(nullptr),
+    m_firstError(true)
 {
     m_data = cJSON_CreateObject();
     for (uint8_t i = 0; i < NB_CURRENTS; i++) {
@@ -43,18 +45,20 @@ void Measure::init()
 }
 
 
-void Measure::adcCallback(uint32_t* data)
+void Measure::adcCallback(volatile int* data)
 {
     //m_periodTimeBuffer[m_iPeriodTimeBuffer] = m_periodTime;
     //m_iPeriodTimeBuffer++;
 
-    m_tension.setVal(CALIB_A_COEFFS[TENSION_ID] * ((float)data[TENSION_ID] - (float)data[VREF_ID]) + CALIB_B_COEFFS[TENSION_ID]);
+    m_tension.setVal(CALIB_A_COEFFS[TENSION_ID] * ((float)data[TENSION_ID] - (float)data[VREF_ID]) + CALIB_B_COEFFS[TENSION_ID], (float)data[TENSION_ID]);
     
     float czPoint(0.);
     float deltaT(0.);
 
     switch(m_initState) {
         case INIT:
+            //ESP_LOGI("Measure", "Current State : %s", "INIT");
+            //ESP_LOGI("Measure", "Switching State : %s", "WAITING_ZC");
             m_initState = WAITING_ZC;
             return;
         break;
@@ -69,6 +73,7 @@ void Measure::adcCallback(uint32_t* data)
                 }
                 m_periodTime = deltaT;
                 m_initState = NORMAL_PHASE;
+                //ESP_LOGI("Measure", "Switching State : %s", "NORMAL_PHASE");
             }
             return;
         break;
@@ -81,8 +86,10 @@ void Measure::adcCallback(uint32_t* data)
     if (m_tension.isCrossingZero(&czPoint)) {
 
         // Robustess check
-        if (m_periodTime < (1. / MAX_AC_FREQ)) {
+        if (m_periodTime < (1. / MAX_AC_FREQ) && m_firstError) {
             errorManager.error(AC_FREQ_ERROR, "Measure", "Error on AC frequency calculation : " + std::to_string(1. / m_periodTime));
+            m_tension.printBuffer("Tension");
+            m_firstError = false;
         }
 
         // Calculation of the last point of the previous period
@@ -127,8 +134,9 @@ void Measure::adcCallback(uint32_t* data)
         }
         m_periodTime += m_timerPeriod;
         
-        if (m_periodTime > (1. / MIN_AC_FREQ)) {
-            errorManager.error(AC_FREQ_ERROR, "Measure", "Error on AC frequency calculation : " + std::to_string(1. / m_periodTime));
+        if (((1. / m_periodTime) < MIN_AC_FREQ) && m_firstError) {
+            errorManager.error(AC_FREQ_ERROR, "Measure", "AC Frequency is to low : " + std::to_string(1. / m_periodTime) + "Hz");
+            m_firstError = false;
         }
     }
 }
@@ -210,6 +218,24 @@ std::string Measure::getJson()
 
     std::string dataString(cJSON_Print(jsonDataList));
     cJSON_Delete(jsonDataList);
+
+    return dataString;
+}
+
+
+std::string Measure::getBufferJson()
+{
+    cJSON* jsonBuffers = cJSON_CreateObject();
+    cJSON_AddItemToObject(jsonBuffers, "tension", m_tension.getBufferJson());
+
+    uint8_t i = 0;
+    for (Current &current : m_currents) {
+        cJSON_AddItemToObject(jsonBuffers, std::string("current" + std::to_string(i)).c_str(), current.getBufferJson());
+        i++;
+    }
+
+    std::string dataString(cJSON_Print(jsonBuffers));
+    cJSON_Delete(jsonBuffers);
 
     return dataString;
 }
