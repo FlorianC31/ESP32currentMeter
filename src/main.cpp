@@ -40,14 +40,19 @@ struct adc_reading_t {
 static SemaphoreHandle_t bufferMutex = NULL;
 //static QueueHandle_t bufferReadyQueue = NULL;
 
-std::array<std::array<uint32_t, NB_SAMPLES>, NB_CHANNELS> adcBuffer;
+std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer1;
+std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer2;
+
+std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* inputBuffer(&buffer1);
+std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* outputBuffer(&buffer2);
 
 
 static adc_continuous_handle_t adc_handle = NULL;
 static TaskHandle_t adc_task_handle = NULL;
-//static TaskHandle_t process_task_handle = NULL;
+static TaskHandle_t process_task_handle = NULL;
 
-uint32_t lastTimestamp = 0;
+uint32_t lastTimestampAdc = 0;
+uint32_t lastTimestampProcess = 0;
 
 
 /**
@@ -115,15 +120,15 @@ void adc_task(void *pvParameters) {
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(adc_handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
 
+
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         uint32_t curentTimestamp = esp_timer_get_time();
-        if (lastTimestamp != 0) {
-            uint32_t detlaT = (curentTimestamp - lastTimestamp);
-            ESP_LOGW(TAG, "Actual Period : %luµs", detlaT);
+        if (lastTimestampAdc != 0) {
+            uint32_t detlaT = (curentTimestamp - lastTimestampAdc);
+            ESP_LOGW(TAG, "adc_task - Actual Period : %luµs", detlaT);
         }
-        lastTimestamp = curentTimestamp;
-
+        lastTimestampAdc = curentTimestamp;
 
         ret = adc_continuous_read(adc_handle, adc_raw.data(), adc_raw.size(), &ret_num, 0);
         if (ret == ESP_OK) {
@@ -137,14 +142,17 @@ void adc_task(void *pvParameters) {
                         if (p->type2.channel >= NB_CHANNELS || bufferIndex >= NB_SAMPLES) {
                             ESP_LOGW(TAG, "Buffer index error: %u/%i - %u/%i", p->type2.channel, NB_CHANNELS, bufferIndex, NB_SAMPLES);
                         }
-
-                        xSemaphoreTake(bufferMutex, portMAX_DELAY);     
-                        adcBuffer[p->type2.channel][bufferIndex] = p->type2.data;
-                        xSemaphoreGive(bufferMutex);
+   
+                        (*inputBuffer)[bufferIndex][p->type2.channel] = p->type2.data;
                     } else {
                         ESP_LOGW(TAG, "Error unknown channel: %u", p->type2.channel);
                     }
                 }
+                xSemaphoreTake(bufferMutex, portMAX_DELAY);
+                std::swap(inputBuffer, outputBuffer);
+                xSemaphoreGive(bufferMutex);
+                xTaskNotifyGive(process_task_handle);
+
             } else {
                 ESP_LOGW(TAG, "Error on ADC buffer size: %lub - Expected: %ib", ret_num, ADC_BUFFER_SIZE);
             }
@@ -159,45 +167,40 @@ void adc_task(void *pvParameters) {
  * 
  * This task processes the ADC data and logs the results.
  */
-/*void process_and_log_task(void *pvParameters) {
+void process_and_log_task(void *pvParameters) {
     ESP_LOGI(TAG, "Process and log task starting");
-    std::array<adc_reading_t, NB_SAMPLES>* buffer_to_process;
+
     uint32_t processed_count = 0;
 
-    while (1) {
-        if (xQueueReceive(bufferReadyQueue, &buffer_to_process, portMAX_DELAY) == pdTRUE) {
-            xSemaphoreTake(bufferMutex, portMAX_DELAY);
-            
-            std::string indexValues = "Index Values";
-            std::string timestampValues = "TimeStamp Values";
-            std::string tensionValues = "Tension Values";
-            std::string vrefValues = "Vref Values";
+    while (1) {        
+        std::string tensionValues = "Tension Values";
+        std::string vrefValues = "Vref Values";
 
-            for (const auto& sample : *buffer_to_process) {
-                indexValues += ";" + std::to_string(sample.index);
-                timestampValues += ";" + std::to_string(sample.timestamp);
-                tensionValues += ";" + std::to_string(sample.values[TENSION_ID]);
-                vrefValues += ";" + std::to_string(sample.values[VREF_ID]);
-            }
+        // Wait for notification from adc_task
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);        
+        xSemaphoreTake(bufferMutex, portMAX_DELAY);
 
-            processed_count += NB_SAMPLES;
-            ESP_LOGI(TAG, "Processed %lu samples", processed_count);
-            ESP_LOGI(TAG, "Last value of buffer %luV", (*buffer_to_process)[NB_SAMPLES-1].values[TENSION_ID]);
-            ESP_LOGI(TAG, "Last timestamp of buffer %lu", (*buffer_to_process)[NB_SAMPLES-1].timestamp);
 
-            ESP_LOGI(TAG, "%s", indexValues.c_str());
-            ESP_LOGI(TAG, "%s", timestampValues.c_str());
-            ESP_LOGI(TAG, "%s", tensionValues.c_str());
-            ESP_LOGI(TAG, "%s", vrefValues.c_str());
-
-            int64_t time_diff = (*buffer_to_process)[NB_SAMPLES-1].timestamp - (*buffer_to_process)[0].timestamp;
-            float actual_rate = (NB_SAMPLES - 1) * 1000000.0f / time_diff;
-            ESP_LOGI(TAG, "Actual sampling rate: %.2f Hz", actual_rate);
-
-            xSemaphoreGive(bufferMutex);
+        uint32_t curentTimestamp = esp_timer_get_time();
+        if (lastTimestampProcess != 0) {
+            uint32_t detlaT = (curentTimestamp - lastTimestampProcess);
+            ESP_LOGW(TAG, "process_and_log_task - Actual Period : %luµs", detlaT);
         }
+        lastTimestampProcess = curentTimestamp;
+
+        /*for (const auto& sample : *outputBuffer) {
+            tensionValues += ";" + std::to_string(sample[TENSION_ID]);
+            vrefValues += ";" + std::to_string(sample[VREF_ID]);
+        }*/
+        xSemaphoreGive(bufferMutex);
+
+        processed_count += NB_SAMPLES;
+        ESP_LOGI(TAG, "Processed %lu samples", processed_count);
+
+        //ESP_LOGI(TAG, "%s", tensionValues.c_str());
+        //ESP_LOGI(TAG, "%s", vrefValues.c_str());
     }
-}*/
+}
 
 extern "C" void app_main(void) {
     ESP_LOGI(TAG, "Application starting");
@@ -206,7 +209,7 @@ extern "C" void app_main(void) {
     bufferMutex = xSemaphoreCreateMutex();
     //bufferReadyQueue = xQueueCreate(2, sizeof(std::array<adc_reading_t, NB_SAMPLES>*));
 
-    //xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 4, &process_task_handle, 1);
+    xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 4, &process_task_handle, 1);
     xTaskCreatePinnedToCore(adc_task, "ADC Task", 8192, NULL, 5, &adc_task_handle, 0);
 
     ESP_LOGI(TAG, "Tasks created, application running");
