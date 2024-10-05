@@ -1,4 +1,5 @@
 #include "adc.h"
+#include "chrono.h"
 
 // Adjusted ADC buffer size for better performance
 #define ADC_BUFFER_SIZE (NB_CHANNELS * NB_SAMPLES * SOC_ADC_DIGI_RESULT_BYTES)
@@ -98,15 +99,19 @@ void adc_task(void *pvParameters) {
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(adc_handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
 
+    //Chrono chrono("Adc", 20.5, 20);
+
 
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         uint32_t curentTimestamp = esp_timer_get_time();
         if (lastTimestampAdc != 0) {
             uint32_t detlaT = (curentTimestamp - lastTimestampAdc);
-            ESP_LOGW(TAG, "adc_task - Actual Period : %luµs", detlaT);
+            ESP_LOGI(TAG, "adc_task - Actual Period : %luµs", detlaT);
         }
         lastTimestampAdc = curentTimestamp;
+
+        //chrono.startCycle();
 
         ret = adc_continuous_read(adc_handle, adc_raw.data(), adc_raw.size(), &ret_num, 0);
         if (ret == ESP_OK) {
@@ -118,24 +123,33 @@ void adc_task(void *pvParameters) {
 
                     if (p->type2.channel < NB_CHANNELS) {
                         if (p->type2.channel >= NB_CHANNELS || bufferIndex >= NB_SAMPLES) {
-                            ESP_LOGW(TAG, "Buffer index error: %u/%i - %u/%i", p->type2.channel, NB_CHANNELS, bufferIndex, NB_SAMPLES);
+                            ESP_LOGE(TAG, "Buffer index error: %u/%i - %u/%i", p->type2.channel, NB_CHANNELS, bufferIndex, NB_SAMPLES);
                         }
    
                         (*inputBuffer)[bufferIndex][p->type2.channel] = p->type2.data;
                     } else {
-                        ESP_LOGW(TAG, "Error unknown channel: %u", p->type2.channel);
+                        ESP_LOGE(TAG, "Error unknown channel: %u", p->type2.channel);
                     }
                 }
                 xSemaphoreTake(bufferMutex, portMAX_DELAY);
                 std::swap(inputBuffer, outputBuffer);
                 xSemaphoreGive(bufferMutex);
                 xTaskNotifyGive(process_task_handle);
+                ESP_LOGD(TAG, "OK");
+
 
             } else {
-                ESP_LOGW(TAG, "Error on ADC buffer size: %lub - Expected: %ib", ret_num, ADC_BUFFER_SIZE);
+                ESP_LOGE(TAG, "Error on ADC buffer size: %lub - Expected: %ib", ret_num, ADC_BUFFER_SIZE);
             }
+            //taskYIELD();
+            //vTaskDelay(pdMS_TO_TICKS(15)); // 10ms delay
         } else {
-            ESP_LOGW(TAG, "ADC continuous read failed: %s", esp_err_to_name(ret));
+            ESP_LOGE(TAG, "ADC continuous read failed: %s", esp_err_to_name(ret));
         }
+
+        //chrono.endCycle();
+
+        uint64_t end_time = esp_timer_get_time();
+        ESP_LOGD(TAG, "Task execution time: %llu µs", end_time - curentTimestamp);
     }
 }

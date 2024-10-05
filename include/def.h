@@ -58,4 +58,7 @@ extern TaskHandle_t adc_task_handle;
 extern TaskHandle_t process_task_handle;
 extern SemaphoreHandle_t bufferMutex;
 
+extern std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* inputBuffer;
+extern std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* outputBuffer;
+
 #endif      // __DEF_H
