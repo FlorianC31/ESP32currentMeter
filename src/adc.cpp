@@ -1,30 +1,36 @@
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <freertos/semphr.h>
-#include <esp_system.h>
-#include <esp_log.h>
-#include <esp_adc/adc_continuous.h>
-#include <driver/gpio.h>
-
-#include <string>
-#include <vector>
-#include <array>
-
 #include "adc.h"
-
 
 // Adjusted ADC buffer size for better performance
 #define ADC_BUFFER_SIZE (NB_CHANNELS * NB_SAMPLES * SOC_ADC_DIGI_RESULT_BYTES)
 
-static const char* TAG = "ADC_APP";
+
+static const char* TAG = "ADC_TASK";
 
 static const std::array<adc_channel_t, NB_CHANNELS> ADC_CHANNELS = {
     ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3,
     ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6
 };
 
+struct adc_reading_t {
+    uint16_t index;
+    uint32_t timestamp;
+    std::array<uint32_t, NB_CHANNELS> values;
+};
+
+SemaphoreHandle_t bufferMutex = NULL;
+//static QueueHandle_t bufferReadyQueue = NULL;
+
+std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer1;
+std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer2;
+
+std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* inputBuffer(&buffer1);
+std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* outputBuffer(&buffer2);
+
 
 static adc_continuous_handle_t adc_handle = NULL;
+TaskHandle_t adc_task_handle = NULL;
+
+uint32_t lastTimestampAdc = 0;
 
 
 /**
@@ -92,16 +98,15 @@ void adc_task(void *pvParameters) {
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(adc_handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
 
-    
-    /*std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer1;
-    std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer2;
-
-    std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* inputBuffer(&buffer1);
-    std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* outputBuffer(&buffer2);*/
-
 
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        uint32_t curentTimestamp = esp_timer_get_time();
+        if (lastTimestampAdc != 0) {
+            uint32_t detlaT = (curentTimestamp - lastTimestampAdc);
+            ESP_LOGW(TAG, "adc_task - Actual Period : %luµs", detlaT);
+        }
+        lastTimestampAdc = curentTimestamp;
 
         ret = adc_continuous_read(adc_handle, adc_raw.data(), adc_raw.size(), &ret_num, 0);
         if (ret == ESP_OK) {
@@ -116,13 +121,13 @@ void adc_task(void *pvParameters) {
                             ESP_LOGW(TAG, "Buffer index error: %u/%i - %u/%i", p->type2.channel, NB_CHANNELS, bufferIndex, NB_SAMPLES);
                         }
    
-                        //(*inputBuffer)[bufferIndex][p->type2.channel] = p->type2.data;
+                        (*inputBuffer)[bufferIndex][p->type2.channel] = p->type2.data;
                     } else {
                         ESP_LOGW(TAG, "Error unknown channel: %u", p->type2.channel);
                     }
                 }
                 xSemaphoreTake(bufferMutex, portMAX_DELAY);
-                //std::swap(inputBuffer, outputBuffer);
+                std::swap(inputBuffer, outputBuffer);
                 xSemaphoreGive(bufferMutex);
                 xTaskNotifyGive(process_task_handle);
 
@@ -134,4 +139,3 @@ void adc_task(void *pvParameters) {
         }
     }
 }
-

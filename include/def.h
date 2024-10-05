@@ -54,8 +54,8 @@ const float CALIB_A_COEFFS[] = {0.0387, 0.0168, 0.0162, 0.0233, 0.0538, 0.412572
 const float CALIB_B_COEFFS[] = {0., 0., 0., 0., 0., 0.}; //{0.014, -0.006, -0.054, -0.0515, 0.0395, 0.2065};
 
 
-//extern TaskHandle_t adc_task_handle;
-//extern TaskHandle_t process_task_handle;
-//extern SemaphoreHandle_t bufferMutex;
+extern TaskHandle_t adc_task_handle;
+extern TaskHandle_t process_task_handle;
+extern SemaphoreHandle_t bufferMutex;
 
 #endif      // __DEF_H
