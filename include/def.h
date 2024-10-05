@@ -1,6 +1,20 @@
 #ifndef __DEF_H
 #define __DEF_H
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+#include <esp_system.h>
+#include <esp_timer.h>
+#include <esp_adc/adc_continuous.h>
+#include <driver/gpio.h>
+#include "nvs_flash.h"
+#include <esp_log.h>
+
+#include <array>
+#include <vector>
+#include <string>
+
 #ifndef UNUSED
 #define UNUSED (void)
 #endif
@@ -12,10 +26,11 @@
 #define ANALYZED_PERIOD 20.480                                  // ms (A little bit more than 1/50Hz = 20ms)
 #define NB_CURRENTS     5
 #define NB_CHANNELS     (NB_CURRENTS + 2)
-#define SAMPLE_RATE     (1000 / ANALYZED_PERIOD * NB_SAMPLES)
-#define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)     // µs
+#define SAMPLE_FREQ     (1000 * NB_SAMPLES / ANALYZED_PERIOD)       // Hz
+#define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)       // µs
 #define TENSION_ID      (NB_CURRENTS + 0)
 #define VREF_ID         (NB_CURRENTS + 1)
+
 
 // Measure configuration
 #define MEASURE_PACKET_PERIOD   (5 * 60)             // 5 minutes in seconds
@@ -39,5 +54,8 @@ const float CALIB_A_COEFFS[] = {0.0387, 0.0168, 0.0162, 0.0233, 0.0538, 0.412572
 const float CALIB_B_COEFFS[] = {0., 0., 0., 0., 0., 0.}; //{0.014, -0.006, -0.054, -0.0515, 0.0395, 0.2065};
 
 
+//extern TaskHandle_t adc_task_handle;
+//extern TaskHandle_t process_task_handle;
+//extern SemaphoreHandle_t bufferMutex;
 
 #endif      // __DEF_H

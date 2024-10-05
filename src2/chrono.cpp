@@ -11,7 +11,9 @@
  * Initializes the Chrono object with a name and a print frequency.
  *
  * @param name The name of the Chrono object.
- * @param printFreq The frequency at which to print the timing statistics.
+ * @param limit high limit (in µs) of the chrono (a counter will count how many times this limit is not respected)
+ * @param printFreq The frequency (number of itterations) at which to print the timing statistics.
+ * @param debug if true, the chrono will be printed at the end if each cycle
  */
 Chrono::Chrono(std::string name, int limit, int printFreq, bool debug) :
     m_name("Chrono" + name),

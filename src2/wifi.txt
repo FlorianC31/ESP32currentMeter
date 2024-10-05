@@ -115,9 +115,9 @@ static esp_err_t get_time_handler(httpd_req_t *req) {
  * @return esp_err_t ESP_OK si la requête est traitée avec succès.
  */
 static esp_err_t trigger_action_handler(httpd_req_t *req) {
-    xSemaphoreTake(mutex, portMAX_DELAY); // Prendre le mutex pour accéder à actionFlag en toute sécurité
+    //xSemaphoreTake(mutex, portMAX_DELAY); // Prendre le mutex pour accéder à actionFlag en toute sécurité
     actionFlag = true;
-    xSemaphoreGive(mutex); // Libérer le mutex
+    //xSemaphoreGive(mutex); // Libérer le mutex
     
     httpd_resp_send(req, "Action triggered", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
