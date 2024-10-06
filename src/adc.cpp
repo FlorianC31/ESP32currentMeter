@@ -99,19 +99,11 @@ void adc_task(void *pvParameters) {
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(adc_handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
 
-    //Chrono chrono("Adc", 20.5, 20);
-
 
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        uint32_t curentTimestamp = esp_timer_get_time();
-        if (lastTimestampAdc != 0) {
-            uint32_t detlaT = (curentTimestamp - lastTimestampAdc);
-            ESP_LOGI(TAG, "adc_task - Actual Period : %luµs", detlaT);
-        }
-        lastTimestampAdc = curentTimestamp;
 
-        //chrono.startCycle();
+        adcChrono->startCycle();
 
         ret = adc_continuous_read(adc_handle, adc_raw.data(), adc_raw.size(), &ret_num, 0);
         if (ret == ESP_OK) {
@@ -147,9 +139,6 @@ void adc_task(void *pvParameters) {
             ESP_LOGE(TAG, "ADC continuous read failed: %s", esp_err_to_name(ret));
         }
 
-        //chrono.endCycle();
-
-        uint64_t end_time = esp_timer_get_time();
-        ESP_LOGD(TAG, "Task execution time: %llu µs", end_time - curentTimestamp);
+        adcChrono->endCycle();
     }
 }

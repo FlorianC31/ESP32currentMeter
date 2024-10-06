@@ -6,6 +6,7 @@ TaskHandle_t process_task_handle = NULL;
 //uint32_t lastTimestampProcess = 0;
 
 Chrono chrono("Process", 20.5, 200);
+Chrono* adcChrono = new Chrono("Adc", 20.5, 20, true);
 
 /**
  * @brief Process and log task function

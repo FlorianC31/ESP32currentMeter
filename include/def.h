@@ -61,4 +61,7 @@ extern SemaphoreHandle_t bufferMutex;
 extern std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* inputBuffer;
 extern std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* outputBuffer;
 
+class Chrono;
+extern Chrono* adcChrono;
+
 #endif      // __DEF_H

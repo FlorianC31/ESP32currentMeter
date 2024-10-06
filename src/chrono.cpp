@@ -23,7 +23,9 @@ Chrono::Chrono(std::string name, int limit, int printFreq, bool debug) :
     m_startTime(0),
     m_nbOverLimit(0)
 {
+    ESP_LOGI("Chrono", "Start of constructor");
     init();
+    ESP_LOGI("Chrono", "End of constructor");
 }
 
 
