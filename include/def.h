@@ -56,12 +56,12 @@ const float CALIB_B_COEFFS[] = {0., 0., 0., 0., 0., 0.}; //{0.014, -0.006, -0.05
 
 extern TaskHandle_t adc_task_handle;
 extern TaskHandle_t process_task_handle;
-extern SemaphoreHandle_t bufferMutex;
-
-extern std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* inputBuffer;
-extern std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* outputBuffer;
 
 class Chrono;
 extern Chrono* adcChrono;
+
+// Define the queue handle
+extern QueueHandle_t adcDataQueue;
+
 
 #endif      // __DEF_H

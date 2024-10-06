@@ -3,9 +3,9 @@
 #include "chrono.h"
 
 TaskHandle_t process_task_handle = NULL;
-//uint32_t lastTimestampProcess = 0;
+QueueHandle_t adcDataQueue = NULL;
 
-Chrono chrono("Process", 20.5, 200);
+Chrono chrono("Process", 20.5, 200, true);
 Chrono* adcChrono = new Chrono("Adc", 20.5, 20, true);
 
 /**
@@ -18,39 +18,31 @@ void process_and_log_task(void *pvParameters) {
     static const char* TAG = "PROCESS_TASK";
 
     ESP_LOGI(TAG, "Process and log task starting");
+    std::string tensionValues = "Tension Values";
+    std::string vrefValues = "Vref Values";
 
-    //uint32_t processed_count = 0;
+    uint16_t nbSamples = 0;
+    std::array<uint32_t, NB_CHANNELS> adcData;
 
-    while (1) {        
-        //std::string tensionValues = "Tension Values";
-        //std::string vrefValues = "Vref Values";
+    while (1) {
+        if (xQueueReceive(adcDataQueue, &adcData, 1) == pdPASS) {
+            chrono.endCycle();
+            chrono.startCycle();
 
-        // Wait for notification from adc_task
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);        
-        xSemaphoreTake(bufferMutex, portMAX_DELAY);
+            
+            tensionValues += ";" + std::to_string(adcData[TENSION_ID]);
+            vrefValues += ";" + std::to_string(adcData[VREF_ID]);
 
-        chrono.endCycle();
-        chrono.startCycle();
+            nbSamples++;
 
-
-        /*uint32_t curentTimestamp = esp_timer_get_time();
-        if (lastTimestampProcess != 0) {
-            uint32_t detlaT = (curentTimestamp - lastTimestampProcess);
-            ESP_LOGW(TAG, "process_and_log_task - Actual Period : %luµs", detlaT);
+            if (nbSamples == 2 * NB_SAMPLES) {
+                ESP_LOGW(TAG, "%s", tensionValues.c_str());
+                ESP_LOGW(TAG, "%s", vrefValues.c_str());
+                tensionValues = "Tension Values";
+                vrefValues = "Vref Values";
+                nbSamples = 0;
+            }
         }
-        lastTimestampProcess = curentTimestamp;*/
-
-        /*for (const auto& sample : *outputBuffer) {
-            tensionValues += ";" + std::to_string(sample[TENSION_ID]);
-            vrefValues += ";" + std::to_string(sample[VREF_ID]);
-        }*/
-        xSemaphoreGive(bufferMutex);
-
-        /*processed_count += NB_SAMPLES;
-        ESP_LOGI(TAG, "Processed %lu samples", processed_count);*/
-
-        //ESP_LOGI(TAG, "%s", tensionValues.c_str());
-        //ESP_LOGI(TAG, "%s", vrefValues.c_str());
     }
 }
 
@@ -60,10 +52,13 @@ extern "C" void app_main(void) {
     ESP_LOGW(TAG, "Application starting");
     ESP_ERROR_CHECK(nvs_flash_init());
 
-    bufferMutex = xSemaphoreCreateMutex();
-    //bufferReadyQueue = xQueueCreate(2, sizeof(std::array<adc_reading_t, NB_SAMPLES>*));
+    adcDataQueue = xQueueCreate(NB_SAMPLES * 2, sizeof(std::array<uint32_t, NB_CHANNELS>));
+    if (adcDataQueue == NULL) {
+        ESP_LOGE(TAG, "Failed to create ADC data queue");
+        vTaskDelete(NULL);
+    }
 
-    xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 5, &process_task_handle, 1);
+    xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 4, &process_task_handle, 1);
     xTaskCreatePinnedToCore(adc_task, "ADC Task", 8192, NULL, 5, &adc_task_handle, 0);
 
     ESP_LOGW(TAG, "Tasks created, application running");

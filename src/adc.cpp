@@ -21,11 +21,11 @@ struct adc_reading_t {
 SemaphoreHandle_t bufferMutex = NULL;
 //static QueueHandle_t bufferReadyQueue = NULL;
 
-std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer1;
+/*std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer1;
 std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer2;
 
 std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* inputBuffer(&buffer1);
-std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* outputBuffer(&buffer2);
+std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* outputBuffer(&buffer2);*/
 
 
 static adc_continuous_handle_t adc_handle = NULL;
@@ -99,6 +99,9 @@ void adc_task(void *pvParameters) {
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(adc_handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
 
+    std::array<uint32_t, NB_CHANNELS>* adcData(nullptr);
+
+    int nbSample = 0;
 
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
@@ -106,37 +109,53 @@ void adc_task(void *pvParameters) {
         adcChrono->startCycle();
 
         ret = adc_continuous_read(adc_handle, adc_raw.data(), adc_raw.size(), &ret_num, 0);
-        if (ret == ESP_OK) {
-            if (ret_num == ADC_BUFFER_SIZE) {
-                for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
-                    adc_digi_output_data_t *p = reinterpret_cast<adc_digi_output_data_t*>(&adc_raw[i]);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "ADC continuous read failed: %s", esp_err_to_name(ret));
+            continue;
+        }
 
-                    uint16_t bufferIndex = i / (NB_CHANNELS * SOC_ADC_DIGI_RESULT_BYTES);
+        if (ret_num != ADC_BUFFER_SIZE) {
+            ESP_LOGE(TAG, "Error on ADC buffer size: %lub - Expected: %ib", ret_num, ADC_BUFFER_SIZE);
+            continue;
+        }
 
-                    if (p->type2.channel < NB_CHANNELS) {
-                        if (p->type2.channel >= NB_CHANNELS || bufferIndex >= NB_SAMPLES) {
-                            ESP_LOGE(TAG, "Buffer index error: %u/%i - %u/%i", p->type2.channel, NB_CHANNELS, bufferIndex, NB_SAMPLES);
-                        }
-   
-                        (*inputBuffer)[bufferIndex][p->type2.channel] = p->type2.data;
-                    } else {
-                        ESP_LOGE(TAG, "Error unknown channel: %u", p->type2.channel);
+        for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
+            adc_digi_output_data_t *p = reinterpret_cast<adc_digi_output_data_t*>(&adc_raw[i]);
+
+            uint16_t bufferIndex = i / (NB_CHANNELS * SOC_ADC_DIGI_RESULT_BYTES);
+
+            if (p->type2.channel >= NB_CHANNELS && p->type2.channel < 0) {
+                ESP_LOGE(TAG, "Error unknown channel: %u", p->type2.channel);
+                continue;                        
+            }
+
+            if (bufferIndex >= NB_SAMPLES) {
+                ESP_LOGE(TAG, "Buffer index error: %u/%i - %u/%i", p->type2.channel, NB_CHANNELS, bufferIndex, NB_SAMPLES);
+                continue;
+            }
+
+            // If the current channel is the first on, create a new array
+            if (p->type2.channel == 0) {
+                adcData = new std::array<uint32_t, NB_CHANNELS>;
+            }
+
+            if (adcData != nullptr) {
+                // filled the array for each channel
+                (*adcData)[p->type2.channel] = p->type2.data;
+
+
+                // If the current channel is the last one, send the array to the queue
+                if (p->type2.channel == NB_CHANNELS - 1) {
+                    nbSample++;
+                    if (xQueueSend(adcDataQueue, adcData, 1) != pdPASS) {
+                        ESP_LOGE(TAG, "Error sending ADC data to the queue - %i", nbSample);
+                        DEL_OBJ(adcData);
+                    }
+                    else {
+                        //ESP_LOGE(TAG, "ADC data successfully sent to the queue - %i", nbSample);
                     }
                 }
-                xSemaphoreTake(bufferMutex, portMAX_DELAY);
-                std::swap(inputBuffer, outputBuffer);
-                xSemaphoreGive(bufferMutex);
-                xTaskNotifyGive(process_task_handle);
-                ESP_LOGD(TAG, "OK");
-
-
-            } else {
-                ESP_LOGE(TAG, "Error on ADC buffer size: %lub - Expected: %ib", ret_num, ADC_BUFFER_SIZE);
             }
-            //taskYIELD();
-            //vTaskDelay(pdMS_TO_TICKS(15)); // 10ms delay
-        } else {
-            ESP_LOGE(TAG, "ADC continuous read failed: %s", esp_err_to_name(ret));
         }
 
         adcChrono->endCycle();
