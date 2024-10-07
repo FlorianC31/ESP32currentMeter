@@ -1,9 +1,6 @@
 #include "adc.h"
 #include "chrono.h"
 
-// Adjusted ADC buffer size for better performance
-#define ADC_BUFFER_SIZE (NB_CHANNELS * NB_SAMPLES * SOC_ADC_DIGI_RESULT_BYTES)
-
 
 static const char* TAG = "ADC_TASK";
 
@@ -18,7 +15,6 @@ struct adc_reading_t {
     std::array<uint32_t, NB_CHANNELS> values;
 };
 
-SemaphoreHandle_t bufferMutex = NULL;
 //static QueueHandle_t bufferReadyQueue = NULL;
 
 /*std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer1;
@@ -32,6 +28,8 @@ static adc_continuous_handle_t adc_handle = NULL;
 TaskHandle_t adc_task_handle = NULL;
 
 uint32_t lastTimestampAdc = 0;
+
+uint32_t nbSamples = 0;
 
 
 /**
@@ -49,17 +47,21 @@ uint32_t lastTimestampAdc = 0;
  * @return true if a higher priority task was woken by the notification, false otherwise
  */
 static bool IRAM_ATTR adc_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data) {
-    static uint32_t sample_count = 0;
-    sample_count += edata->size / (SOC_ADC_DIGI_RESULT_BYTES * NB_CHANNELS);
-    
-    if (sample_count >= NB_SAMPLES) {
-        sample_count = 0;
-        BaseType_t high_task_awoken = pdFALSE;
-        vTaskNotifyGiveFromISR(adc_task_handle, &high_task_awoken);
-        return high_task_awoken == pdTRUE;
+    nbSamples++;
+    if (nbSamples == NB_SAMPLES) {
+        nbSamples = 0;
+        BaseType_t mustYield = pdFALSE;
+        //Notify that ADC continuous driver has done enough number of conversions
+        vTaskNotifyGiveFromISR(adc_task_handle, &mustYield);
+
+        return (mustYield == pdTRUE);
     }
     return false;
 }
+
+
+//void adc_init() {}
+
 
 /**
  * @brief ADC task function
@@ -68,10 +70,6 @@ static bool IRAM_ATTR adc_conv_done_cb(adc_continuous_handle_t handle, const adc
  */
 void adc_task(void *pvParameters) {
     ESP_LOGI(TAG, "ADC task starting");
-    
-    esp_err_t ret;
-    uint32_t ret_num = 0;
-    std::array<uint8_t, ADC_BUFFER_SIZE> adc_raw;
 
     adc_continuous_handle_cfg_t adc_config;
     adc_config.max_store_buf_size = ADC_BUFFER_SIZE;
@@ -94,12 +92,18 @@ void adc_task(void *pvParameters) {
     dig_cfg.adc_pattern = adc_pattern.data();
     ESP_ERROR_CHECK(adc_continuous_config(adc_handle, &dig_cfg));
 
+
+
     adc_continuous_evt_cbs_t cbs;
     cbs.on_conv_done = adc_conv_done_cb;
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(adc_handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
 
-    std::array<uint32_t, NB_CHANNELS>* adcData(nullptr);
+    std::array<uint32_t, NB_CHANNELS> adcData;
+
+    esp_err_t ret;
+    uint32_t ret_num = 0;
+    std::array<uint8_t, ADC_BUFFER_SIZE> adc_raw;
 
     int nbSample = 0;
 
@@ -119,43 +123,25 @@ void adc_task(void *pvParameters) {
             continue;
         }
 
-        for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
-            adc_digi_output_data_t *p = reinterpret_cast<adc_digi_output_data_t*>(&adc_raw[i]);
-
-            uint16_t bufferIndex = i / (NB_CHANNELS * SOC_ADC_DIGI_RESULT_BYTES);
-
-            if (p->type2.channel >= NB_CHANNELS && p->type2.channel < 0) {
-                ESP_LOGE(TAG, "Error unknown channel: %u", p->type2.channel);
-                continue;                        
-            }
-
-            if (bufferIndex >= NB_SAMPLES) {
-                ESP_LOGE(TAG, "Buffer index error: %u/%i - %u/%i", p->type2.channel, NB_CHANNELS, bufferIndex, NB_SAMPLES);
-                continue;
-            }
-
-            // If the current channel is the first on, create a new array
-            if (p->type2.channel == 0) {
-                adcData = new std::array<uint32_t, NB_CHANNELS>;
-            }
-
-            if (adcData != nullptr) {
-                // filled the array for each channel
-                (*adcData)[p->type2.channel] = p->type2.data;
-
-
-                // If the current channel is the last one, send the array to the queue
-                if (p->type2.channel == NB_CHANNELS - 1) {
-                    nbSample++;
-                    if (xQueueSend(adcDataQueue, adcData, 1) != pdPASS) {
-                        ESP_LOGE(TAG, "Error sending ADC data to the queue - %i", nbSample);
-                        DEL_OBJ(adcData);
-                    }
-                    else {
-                        //ESP_LOGE(TAG, "ADC data successfully sent to the queue - %i", nbSample);
-                    }
+        for (uint32_t sample = 0; sample < NB_SAMPLES; sample++) {
+            for (uint32_t channel = 0; channel < NB_CHANNELS; channel++) {
+                uint32_t index = (sample * NB_CHANNELS + channel) * SOC_ADC_DIGI_RESULT_BYTES;
+                adc_digi_output_data_t *p = reinterpret_cast<adc_digi_output_data_t*>(&adc_raw[index]);
+                if (p->type2.channel != channel) {
+                    ESP_LOGE(TAG, "Error on channel: %u != %lu", p->type2.channel, channel);
+                    continue;
                 }
+                adcData[p->type2.channel] = p->type2.data;
             }
+
+            nbSample++;
+            if (xQueueSend(adcDataQueue, &adcData, 1) != pdPASS) {
+                ESP_LOGE(TAG, "Error sending ADC data to the queue - %i", nbSample);
+            }
+            else {
+                //ESP_LOGE(TAG, "ADC data successfully sent to the queue - %i", nbSample);
+            }
+
         }
 
         adcChrono->endCycle();

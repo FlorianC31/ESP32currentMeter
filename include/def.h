@@ -30,6 +30,7 @@
 #define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)       // µs
 #define TENSION_ID      (NB_CURRENTS + 0)
 #define VREF_ID         (NB_CURRENTS + 1)
+#define SAMPLES_IN_BUFF NB_SAMPLES
 
 
 // Measure configuration
@@ -62,6 +63,10 @@ extern Chrono* adcChrono;
 
 // Define the queue handle
 extern QueueHandle_t adcDataQueue;
+
+extern SemaphoreHandle_t bufferMutex;
+extern std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> adcBuffer;
+extern uint8_t bufferPos;
 
 
 #endif      // __DEF_H
