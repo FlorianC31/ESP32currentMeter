@@ -59,7 +59,7 @@ extern TaskHandle_t adc_task_handle;
 extern TaskHandle_t process_task_handle;
 
 class Chrono;
-extern Chrono* adcChrono;
+extern Chrono adcChrono;
 
 // Define the queue handle
 extern QueueHandle_t adcDataQueue;

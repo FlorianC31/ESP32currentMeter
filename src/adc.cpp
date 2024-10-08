@@ -110,7 +110,7 @@ void adc_task(void *pvParameters) {
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        adcChrono->startCycle();
+        adcChrono.startCycle();
 
         ret = adc_continuous_read(adc_handle, adc_raw.data(), adc_raw.size(), &ret_num, 0);
         if (ret != ESP_OK) {
@@ -144,6 +144,6 @@ void adc_task(void *pvParameters) {
 
         }
 
-        adcChrono->endCycle();
+        adcChrono.endCycle();
     }
 }

@@ -1,13 +1,14 @@
 #include "def.h"
 #include "adc.h"
 #include "chrono.h"
+#include "wifi.h"
 
 TaskHandle_t process_task_handle = NULL;
 QueueHandle_t adcDataQueue = NULL;
 
-Chrono chrono("Process", 20.5, 200, true);
-Chrono printChrono("Print", 20.5, 1, true);
-Chrono* adcChrono = new Chrono("Adc", 20.5, 20, true);
+Chrono chrono("Process", 20.5, 200);
+Chrono printChrono("Print", 20.5, 1);
+Chrono adcChrono("Adc", 20.5, 20);
 
 SemaphoreHandle_t bufferMutex = NULL;
 uint8_t bufferPos = 0;
@@ -74,6 +75,7 @@ extern "C" void app_main(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
 
     //adc_init();
+    wifi_init_sta();
     bufferMutex = xSemaphoreCreateMutex();
 
     adcDataQueue = xQueueCreate(SAMPLES_IN_BUFF, sizeof(std::array<uint32_t, NB_CHANNELS>));
@@ -82,8 +84,13 @@ extern "C" void app_main(void) {
         vTaskDelete(NULL);
     }
 
+    start_webserver();
+    
+
     xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 4, &process_task_handle, 1);
     xTaskCreatePinnedToCore(adc_task, "ADC Task", 32768, NULL, 5, &adc_task_handle, 0);
+
+    
 
     ESP_LOGW(TAG, "Tasks created, application running");
 }
