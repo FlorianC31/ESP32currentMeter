@@ -44,7 +44,7 @@ static esp_err_t get_adc_chrono_handler(httpd_req_t *req) {
     //xSemaphoreTake(mutex, portMAX_DELAY); // Prendre le mutex pour accéder aux valeurs ADC en toute sécurité
     
     
-    std::string json_string = adcChrono.getGlobalStats();
+    std::string json_string = "{\"adc\": " + adcChrono.getGlobalStats() + ", \"Freq\": " + freqChrono.getGlobalStats() + "}";
     //xSemaphoreGive(mutex); // Libérer le mutex
     
     httpd_resp_set_type(req, "application/json");
@@ -134,6 +134,12 @@ static esp_err_t trigger_action_handler(httpd_req_t *req) {
  * @return httpd_handle_t Handle du serveur web, ou NULL si le démarrage échoue.
  */
 httpd_handle_t start_webserver(void) {
+
+    static const char* TAG = "start_webserver";
+
+    ESP_LOGW(TAG, "Start");
+
+
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     httpd_handle_t server = NULL;
     
@@ -187,6 +193,8 @@ httpd_handle_t start_webserver(void) {
         httpd_register_uri_handler(server, &uri_post);
     }
     
+    ESP_LOGW(TAG, "Web Server correctly initialized");
+
     return server;
 }
 
@@ -218,6 +226,9 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
  * Cette fonction configure l'interface WiFi en mode station avec une adresse IP statique et démarre la connexion WiFi.
  */
 void wifi_init_sta(void) {
+    static const char* TAG = "wifi_init_sta";
+    ESP_LOGW(TAG, "Wifi initializing");
+
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     
@@ -269,4 +280,6 @@ void wifi_init_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGW(TAG, "Wifi correctly initialized");
 }

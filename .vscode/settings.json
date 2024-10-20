@@ -62,7 +62,10 @@
         "semaphore": "cpp",
         "stop_token": "cpp",
         "thread": "cpp",
-        "optional": "cpp"
+        "optional": "cpp",
+        "chip_revision.h": "c",
+        "rtc.h": "c",
+        "def.h": "c"
     },
     "sonarlint.pathToCompileCommands": "${workspaceFolder}\\.pio\\build\\esp32-s3-devkitc-1\\bootloader\\compile_commands.json"
 }

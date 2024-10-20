@@ -8,11 +8,12 @@ QueueHandle_t adcDataQueue = NULL;
 
 Chrono chrono("Process", 20.5, 200);
 Chrono printChrono("Print", 20.5, 1);
-Chrono adcChrono("Adc", 20.5, 20);
+Chrono adcChrono("Adc", 20.5);
+Chrono freqChrono("Freq", 20.5);
 
 SemaphoreHandle_t bufferMutex = NULL;
 uint8_t bufferPos = 0;
-std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> adcBuffer;
+std::array<std::array<uint8_t, NB_CHANNELS>, NB_SAMPLES> adcBuffer;
 
 /**
  * @brief Process and log task function
@@ -32,7 +33,7 @@ void process_and_log_task(void *pvParameters) {
     vrefValues = "Vref Values";
 
     //uint16_t nbSamples = 0;
-    std::array<uint32_t, NB_CHANNELS> adcData;
+    std::array<uint8_t, NB_CHANNELS> adcData;
 
     while (1) {
         if (xQueueReceive(adcDataQueue, &adcData, 1) == pdPASS) {
@@ -68,6 +69,19 @@ void process_and_log_task(void *pvParameters) {
     }
 }
 
+void printMemory() {
+    static const char* TAG = "Memory";
+
+    multi_heap_info_t info;
+    heap_caps_get_info(&info, MALLOC_CAP_DEFAULT);
+
+    ESP_LOGW(TAG, "Total heap size (kB): %f", float(info.total_free_bytes + info.total_allocated_bytes) / 1000.);
+    ESP_LOGW(TAG, "Free heap size (kB): %f", float(info.total_free_bytes) / 1000.);
+    ESP_LOGW(TAG, "Allocated heap size (kB): %f", float(info.total_allocated_bytes) / 1000.);
+    ESP_LOGW(TAG, "Minimum free heap size (kB): %f", float(info.minimum_free_bytes) / 1000.);
+}
+
+
 extern "C" void app_main(void) {
     static const char* TAG = "MAIN";
 
@@ -78,17 +92,22 @@ extern "C" void app_main(void) {
     wifi_init_sta();
     bufferMutex = xSemaphoreCreateMutex();
 
-    adcDataQueue = xQueueCreate(SAMPLES_IN_BUFF, sizeof(std::array<uint32_t, NB_CHANNELS>));
+    adcDataQueue = xQueueCreate(SAMPLES_IN_BUFF, sizeof(std::array<uint8_t, NB_CHANNELS>));
     if (adcDataQueue == NULL) {
         ESP_LOGE(TAG, "Failed to create ADC data queue");
         vTaskDelete(NULL);
     }
 
     start_webserver();
+    //printMemory();
     
+    //vTaskDelay(pdMS_TO_TICKS(3*1000));
+    //printMemory();
 
-    xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 4, &process_task_handle, 1);
-    xTaskCreatePinnedToCore(adc_task, "ADC Task", 32768, NULL, 5, &adc_task_handle, 0);
+    xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 4, &process_task_handle, 0);
+    printMemory();
+    xTaskCreatePinnedToCore(adc_task, "ADC Task", 8192, NULL, 5, &adc_task_handle, 1);
+    printMemory();
 
     
 

@@ -1,149 +1,148 @@
 #include "adc.h"
 #include "chrono.h"
 
+#include <string.h>
 
-static const char* TAG = "ADC_TASK";
+#define EXAMPLE_ADC_UNIT                    ADC_UNIT_1
+#define _EXAMPLE_ADC_UNIT_STR(unit)         #unit
+#define EXAMPLE_ADC_UNIT_STR(unit)          _EXAMPLE_ADC_UNIT_STR(unit)
+#define EXAMPLE_ADC_CONV_MODE               ADC_CONV_SINGLE_UNIT_1
+#define EXAMPLE_ADC_ATTEN                   ADC_ATTEN_DB_0
+#define EXAMPLE_ADC_BIT_WIDTH               SOC_ADC_DIGI_MAX_BITWIDTH
 
-static const std::array<adc_channel_t, NB_CHANNELS> ADC_CHANNELS = {
-    ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3,
-    ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6
-};
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2
+#define EXAMPLE_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE1
+#define EXAMPLE_ADC_GET_CHANNEL(p_data)     ((p_data)->type1.channel)
+#define EXAMPLE_ADC_GET_DATA(p_data)        ((p_data)->type1.data)
+#else
+#define EXAMPLE_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE2
+#define EXAMPLE_ADC_GET_CHANNEL(p_data)     ((p_data)->type2.channel)
+#define EXAMPLE_ADC_GET_DATA(p_data)        ((p_data)->type2.data)
+#endif
 
-struct adc_reading_t {
-    uint16_t index;
-    uint32_t timestamp;
-    std::array<uint32_t, NB_CHANNELS> values;
-};
+#define EXAMPLE_READ_LEN                    1024 // (NB_SAMPLES * NB_CHANNELS)
 
-//static QueueHandle_t bufferReadyQueue = NULL;
-
-/*std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer1;
-std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> buffer2;
-
-std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* inputBuffer(&buffer1);
-std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES>* outputBuffer(&buffer2);*/
+#if CONFIG_IDF_TARGET_ESP32
+static adc_channel_t channel[2] = {ADC_CHANNEL_6, ADC_CHANNEL_7};
+#else
+static adc_channel_t channel[NB_CHANNELS] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3,
+    ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6};
+#endif
 
 
-static adc_continuous_handle_t adc_handle = NULL;
+static const char *TAG = "EXAMPLE";
+
 TaskHandle_t adc_task_handle = NULL;
 
-uint32_t lastTimestampAdc = 0;
 
-uint32_t nbSamples = 0;
+static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
+{
+    BaseType_t mustYield = pdFALSE;
+    //Notify that ADC continuous driver has done enough number of conversions
+    vTaskNotifyGiveFromISR(adc_task_handle, &mustYield);
 
+    return (mustYield == pdTRUE);
+}
 
-/**
- * @brief Callback function for ADC conversion events
- * 
- * This function is called by the ADC driver when a batch of ADC conversions is completed.
- * It keeps track of the number of samples collected across all channels.
- * When the desired number of samples (NB_SAMPLES) has been reached for each channel,
- * it notifies the ADC task that a complete set of data is ready for processing.
- * 
- * @param handle The handle of the ADC continuous mode driver
- * @param edata Pointer to the event data, containing information about the completed conversions
- * @param user_data User data passed when registering the callback (unused in this implementation)
- * 
- * @return true if a higher priority task was woken by the notification, false otherwise
- */
-static bool IRAM_ATTR adc_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data) {
-    nbSamples++;
-    if (nbSamples == NB_SAMPLES) {
-        nbSamples = 0;
-        BaseType_t mustYield = pdFALSE;
-        //Notify that ADC continuous driver has done enough number of conversions
-        vTaskNotifyGiveFromISR(adc_task_handle, &mustYield);
+static void continuous_adc_init(adc_continuous_handle_t *out_handle)
+{
+    adc_continuous_handle_t handle = NULL;
 
-        return (mustYield == pdTRUE);
+    adc_continuous_handle_cfg_t adc_config = {
+        .max_store_buf_size = NB_CHANNELS * NB_SAMPLES * SOC_ADC_DIGI_DATA_BYTES_PER_CONV,
+        .conv_frame_size = NB_CHANNELS * NB_SAMPLES * SOC_ADC_DIGI_DATA_BYTES_PER_CONV,
+    };
+    ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
+
+    adc_continuous_config_t dig_cfg = {
+        .sample_freq_hz = static_cast<uint32_t>(SAMPLE_FREQ * NB_CHANNELS),
+        .conv_mode = EXAMPLE_ADC_CONV_MODE,
+        .format = EXAMPLE_ADC_OUTPUT_TYPE,
+    };
+
+    adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
+    dig_cfg.pattern_num = NB_CHANNELS;
+    for (int i = 0; i < NB_CHANNELS; i++) {
+        adc_pattern[i].atten = EXAMPLE_ADC_ATTEN;
+        adc_pattern[i].channel = channel[i] & 0x7;
+        adc_pattern[i].unit = EXAMPLE_ADC_UNIT;
+        adc_pattern[i].bit_width = EXAMPLE_ADC_BIT_WIDTH;
+
+        ESP_LOGI(TAG, "adc_pattern[%d].atten is :%"PRIx8, i, adc_pattern[i].atten);
+        ESP_LOGI(TAG, "adc_pattern[%d].channel is :%"PRIx8, i, adc_pattern[i].channel);
+        ESP_LOGI(TAG, "adc_pattern[%d].unit is :%"PRIx8, i, adc_pattern[i].unit);
     }
-    return false;
+    dig_cfg.adc_pattern = adc_pattern;
+    ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
+
+    *out_handle = handle;
 }
 
 
-//void adc_init() {}
-
-
-/**
- * @brief ADC task function
- * 
- * This task configures the ADC, starts continuous sampling, and processes the incoming data.
- */
 void adc_task(void *pvParameters) {
-    ESP_LOGI(TAG, "ADC task starting");
-
-    adc_continuous_handle_cfg_t adc_config;
-    adc_config.max_store_buf_size = ADC_BUFFER_SIZE;
-    adc_config.conv_frame_size = SOC_ADC_DIGI_DATA_BYTES_PER_CONV * NB_CHANNELS;
-    ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &adc_handle));
-
-    adc_continuous_config_t dig_cfg;
-    dig_cfg.sample_freq_hz = static_cast<uint32_t>(SAMPLE_FREQ * NB_CHANNELS);
-    dig_cfg.conv_mode = ADC_CONV_SINGLE_UNIT_1;
-    dig_cfg.format = ADC_DIGI_OUTPUT_FORMAT_TYPE2;
-
-    std::vector<adc_digi_pattern_config_t> adc_pattern(NB_CHANNELS);
-    for (int i = 0; i < NB_CHANNELS; i++) {
-        adc_pattern[i].atten = ADC_ATTEN_DB_12;
-        adc_pattern[i].channel = ADC_CHANNELS[i] & 0x7;
-        adc_pattern[i].unit = ADC_UNIT_1;
-        adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-    }
-    dig_cfg.pattern_num = NB_CHANNELS;
-    dig_cfg.adc_pattern = adc_pattern.data();
-    ESP_ERROR_CHECK(adc_continuous_config(adc_handle, &dig_cfg));
-
-
-
-    adc_continuous_evt_cbs_t cbs;
-    cbs.on_conv_done = adc_conv_done_cb;
-    ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(adc_handle, &cbs, NULL));
-    ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
-
-    std::array<uint32_t, NB_CHANNELS> adcData;
-
     esp_err_t ret;
     uint32_t ret_num = 0;
-    std::array<uint8_t, ADC_BUFFER_SIZE> adc_raw;
+    uint8_t result[EXAMPLE_READ_LEN] = {0};
+    memset(result, 0xcc, EXAMPLE_READ_LEN);
 
-    int nbSample = 0;
+    adc_task_handle = xTaskGetCurrentTaskHandle();
+
+    adc_continuous_handle_t handle = NULL;
+    continuous_adc_init(&handle);
+
+    adc_continuous_evt_cbs_t cbs = {
+        .on_conv_done = s_conv_done_cb,
+    };
+    ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
+    ESP_ERROR_CHECK(adc_continuous_start(handle));
 
     while (1) {
+
+        /**
+         * This is to show you the way to use the ADC continuous mode driver event callback.
+         * This `ulTaskNotifyTake` will block when the data processing in the task is fast.
+         * However in this example, the data processing (print) is slow, so you barely block here.
+         *
+         * Without using this event callback (to notify this task), you can still just call
+         * `adc_continuous_read()` here in a loop, with/without a certain block timeout.
+         */
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
         adcChrono.startCycle();
+        freqChrono.endCycle();
+        freqChrono.startCycle();
 
-        ret = adc_continuous_read(adc_handle, adc_raw.data(), adc_raw.size(), &ret_num, 0);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "ADC continuous read failed: %s", esp_err_to_name(ret));
-            continue;
-        }
+        char unit[] = EXAMPLE_ADC_UNIT_STR(EXAMPLE_ADC_UNIT);
+        
 
-        if (ret_num != ADC_BUFFER_SIZE) {
-            ESP_LOGE(TAG, "Error on ADC buffer size: %lub - Expected: %ib", ret_num, ADC_BUFFER_SIZE);
-            continue;
-        }
-
-        for (uint32_t sample = 0; sample < NB_SAMPLES; sample++) {
-            for (uint32_t channel = 0; channel < NB_CHANNELS; channel++) {
-                uint32_t index = (sample * NB_CHANNELS + channel) * SOC_ADC_DIGI_RESULT_BYTES;
-                adc_digi_output_data_t *p = reinterpret_cast<adc_digi_output_data_t*>(&adc_raw[index]);
-                if (p->type2.channel != channel) {
-                    ESP_LOGE(TAG, "Error on channel: %u != %lu", p->type2.channel, channel);
-                    continue;
+        //while (1) {
+            ret = adc_continuous_read(handle, result, EXAMPLE_READ_LEN, &ret_num, 0);
+            if (ret == ESP_OK) {
+                //ESP_LOGI("TASK", "ret is %x, ret_num is %"PRIu32" bytes", ret, ret_num);
+                for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
+                    adc_digi_output_data_t *p = (adc_digi_output_data_t*)&result[i];
+                    uint32_t chan_num = EXAMPLE_ADC_GET_CHANNEL(p);
+                    uint32_t data = EXAMPLE_ADC_GET_DATA(p);
+                    /* Check the channel number validation, the data is invalid if the channel num exceed the maximum channel */
+                    if (chan_num < SOC_ADC_CHANNEL_NUM(EXAMPLE_ADC_UNIT)) {
+                        //ESP_LOGI(TAG, "Unit: %s, Channel: %"PRIu32", Value: %"PRIx32, unit, chan_num, data);
+                    } else {
+                        ESP_LOGW(TAG, "Invalid data [%s_%"PRIu32"_%"PRIx32"]", unit, chan_num, data);
+                    }
                 }
-                adcData[p->type2.channel] = p->type2.data;
+                /**
+                 * Because printing is slow, so every time you call `ulTaskNotifyTake`, it will immediately return.
+                 * To avoid a task watchdog timeout, add a delay here. When you replace the way you process the data,
+                 * usually you don't need this delay (as this task will block for a while).
+                 */
+                //vTaskDelay(1);
+            } else if (ret == ESP_ERR_TIMEOUT) {
+                //We try to read `EXAMPLE_READ_LEN` until API returns timeout, which means there's no available data
+                break;
             }
-
-            nbSample++;
-            if (xQueueSend(adcDataQueue, &adcData, 1) != pdPASS) {
-                ESP_LOGE(TAG, "Error sending ADC data to the queue - %i", nbSample);
-            }
-            else {
-                //ESP_LOGE(TAG, "ADC data successfully sent to the queue - %i", nbSample);
-            }
-
-        }
-
+        //}
         adcChrono.endCycle();
     }
+    
+    ESP_ERROR_CHECK(adc_continuous_stop(handle));
+    ESP_ERROR_CHECK(adc_continuous_deinit(handle));
 }

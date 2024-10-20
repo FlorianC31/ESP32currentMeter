@@ -24,7 +24,7 @@
 // ADC configuration
 #define NB_SAMPLES      128
 #define ANALYZED_PERIOD 20.480                                  // ms (A little bit more than 1/50Hz = 20ms)
-#define NB_CURRENTS     5
+#define NB_CURRENTS     6
 #define NB_CHANNELS     (NB_CURRENTS + 2)
 #define SAMPLE_FREQ     (1000 * NB_SAMPLES / ANALYZED_PERIOD)       // Hz
 #define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)       // µs
@@ -60,12 +60,13 @@ extern TaskHandle_t process_task_handle;
 
 class Chrono;
 extern Chrono adcChrono;
+extern Chrono freqChrono;
 
 // Define the queue handle
 extern QueueHandle_t adcDataQueue;
 
 extern SemaphoreHandle_t bufferMutex;
-extern std::array<std::array<uint32_t, NB_CHANNELS>, NB_SAMPLES> adcBuffer;
+extern std::array<std::array<uint8_t, NB_CHANNELS>, NB_SAMPLES> adcBuffer;
 extern uint8_t bufferPos;
 
 
