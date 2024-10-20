@@ -30,7 +30,6 @@
 #define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)       // µs
 #define TENSION_ID      (NB_CURRENTS + 0)
 #define VREF_ID         (NB_CURRENTS + 1)
-#define SAMPLES_IN_BUFF NB_SAMPLES
 
 
 // Measure configuration

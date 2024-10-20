@@ -3,24 +3,7 @@
 
 #include <string.h>
 
-#define EXAMPLE_ADC_UNIT                    ADC_UNIT_1
-#define _EXAMPLE_ADC_UNIT_STR(unit)         #unit
-#define EXAMPLE_ADC_UNIT_STR(unit)          _EXAMPLE_ADC_UNIT_STR(unit)
-#define EXAMPLE_ADC_CONV_MODE               ADC_CONV_SINGLE_UNIT_1
-#define EXAMPLE_ADC_ATTEN                   ADC_ATTEN_DB_0
-#define EXAMPLE_ADC_BIT_WIDTH               SOC_ADC_DIGI_MAX_BITWIDTH
 
-#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2
-#define EXAMPLE_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE1
-#define EXAMPLE_ADC_GET_CHANNEL(p_data)     ((p_data)->type1.channel)
-#define EXAMPLE_ADC_GET_DATA(p_data)        ((p_data)->type1.data)
-#else
-#define EXAMPLE_ADC_OUTPUT_TYPE             ADC_DIGI_OUTPUT_FORMAT_TYPE2
-#define EXAMPLE_ADC_GET_CHANNEL(p_data)     ((p_data)->type2.channel)
-#define EXAMPLE_ADC_GET_DATA(p_data)        ((p_data)->type2.data)
-#endif
-
-#define EXAMPLE_READ_LEN                    1024 // (NB_SAMPLES * NB_CHANNELS)
 
 #if CONFIG_IDF_TARGET_ESP32
 static adc_channel_t channel[2] = {ADC_CHANNEL_6, ADC_CHANNEL_7};
@@ -30,7 +13,7 @@ static adc_channel_t channel[NB_CHANNELS] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_C
 #endif
 
 
-static const char *TAG = "EXAMPLE";
+static const char *TAG = "ADC";
 
 TaskHandle_t adc_task_handle = NULL;
 
@@ -48,29 +31,27 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 {
     adc_continuous_handle_t handle = NULL;
 
-    adc_continuous_handle_cfg_t adc_config = {
-        .max_store_buf_size = NB_CHANNELS * NB_SAMPLES * SOC_ADC_DIGI_DATA_BYTES_PER_CONV,
-        .conv_frame_size = NB_CHANNELS * NB_SAMPLES * SOC_ADC_DIGI_DATA_BYTES_PER_CONV,
-    };
+    adc_continuous_handle_cfg_t adc_config;
+    adc_config.max_store_buf_size = ADC_BUFFER_SIZE;
+    adc_config.conv_frame_size = ADC_BUFFER_SIZE;
     ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
 
-    adc_continuous_config_t dig_cfg = {
-        .sample_freq_hz = static_cast<uint32_t>(SAMPLE_FREQ * NB_CHANNELS),
-        .conv_mode = EXAMPLE_ADC_CONV_MODE,
-        .format = EXAMPLE_ADC_OUTPUT_TYPE,
-    };
+    adc_continuous_config_t dig_cfg;
+    dig_cfg.sample_freq_hz = static_cast<uint32_t>(SAMPLE_FREQ * NB_CHANNELS);
+    dig_cfg.conv_mode = ADC_CONV_SINGLE_UNIT_1;
+    dig_cfg.format = ADC_DIGI_OUTPUT_FORMAT_TYPE2;
 
-    adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
+    adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX];
     dig_cfg.pattern_num = NB_CHANNELS;
     for (int i = 0; i < NB_CHANNELS; i++) {
-        adc_pattern[i].atten = EXAMPLE_ADC_ATTEN;
+        adc_pattern[i].atten = ADC_ATTEN_DB_0;
         adc_pattern[i].channel = channel[i] & 0x7;
-        adc_pattern[i].unit = EXAMPLE_ADC_UNIT;
-        adc_pattern[i].bit_width = EXAMPLE_ADC_BIT_WIDTH;
+        adc_pattern[i].unit = ADC_UNIT_1;
+        adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
 
-        ESP_LOGI(TAG, "adc_pattern[%d].atten is :%"PRIx8, i, adc_pattern[i].atten);
-        ESP_LOGI(TAG, "adc_pattern[%d].channel is :%"PRIx8, i, adc_pattern[i].channel);
-        ESP_LOGI(TAG, "adc_pattern[%d].unit is :%"PRIx8, i, adc_pattern[i].unit);
+        ESP_LOGI(TAG, "adc_pattern[%d].atten is :%u", i, adc_pattern[i].atten);
+        ESP_LOGI(TAG, "adc_pattern[%d].channel is :%u", i, adc_pattern[i].channel);
+        ESP_LOGI(TAG, "adc_pattern[%d].unit is :%u", i, adc_pattern[i].unit);
     }
     dig_cfg.adc_pattern = adc_pattern;
     ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
@@ -82,17 +63,16 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 void adc_task(void *pvParameters) {
     esp_err_t ret;
     uint32_t ret_num = 0;
-    uint8_t result[EXAMPLE_READ_LEN] = {0};
-    memset(result, 0xcc, EXAMPLE_READ_LEN);
+    uint8_t result[ADC_BUFFER_SIZE] = {0};
+    memset(result, 0xcc, ADC_BUFFER_SIZE);
 
     adc_task_handle = xTaskGetCurrentTaskHandle();
 
     adc_continuous_handle_t handle = NULL;
     continuous_adc_init(&handle);
 
-    adc_continuous_evt_cbs_t cbs = {
-        .on_conv_done = s_conv_done_cb,
-    };
+    adc_continuous_evt_cbs_t cbs;
+    cbs.on_conv_done = s_conv_done_cb;
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(handle));
 
@@ -111,35 +91,33 @@ void adc_task(void *pvParameters) {
         freqChrono.endCycle();
         freqChrono.startCycle();
 
-        char unit[] = EXAMPLE_ADC_UNIT_STR(EXAMPLE_ADC_UNIT);
         
 
-        //while (1) {
-            ret = adc_continuous_read(handle, result, EXAMPLE_READ_LEN, &ret_num, 0);
-            if (ret == ESP_OK) {
-                //ESP_LOGI("TASK", "ret is %x, ret_num is %"PRIu32" bytes", ret, ret_num);
-                for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
-                    adc_digi_output_data_t *p = (adc_digi_output_data_t*)&result[i];
-                    uint32_t chan_num = EXAMPLE_ADC_GET_CHANNEL(p);
-                    uint32_t data = EXAMPLE_ADC_GET_DATA(p);
-                    /* Check the channel number validation, the data is invalid if the channel num exceed the maximum channel */
-                    if (chan_num < SOC_ADC_CHANNEL_NUM(EXAMPLE_ADC_UNIT)) {
-                        //ESP_LOGI(TAG, "Unit: %s, Channel: %"PRIu32", Value: %"PRIx32, unit, chan_num, data);
-                    } else {
-                        ESP_LOGW(TAG, "Invalid data [%s_%"PRIu32"_%"PRIx32"]", unit, chan_num, data);
-                    }
+        ret = adc_continuous_read(handle, result, ADC_BUFFER_SIZE, &ret_num, 0);
+        if (ret == ESP_OK) {
+            //ESP_LOGI("TASK", "ret is %x, ret_num is %"PRIu32" bytes", ret, ret_num);
+            for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
+                adc_digi_output_data_t *p = (adc_digi_output_data_t*)&result[i];
+                uint32_t chan_num = p->type2.channel;
+                uint32_t data = p->type2.data;
+                /* Check the channel number validation, the data is invalid if the channel num exceed the maximum channel */
+                if (chan_num < SOC_ADC_CHANNEL_NUM(ADC_UNIT_1)) {
+                    //ESP_LOGI(TAG, "Unit: %s, Channel: %"PRIu32", Value: %"PRIx32, unit, chan_num, data);
+                } else {
+                    ESP_LOGW(TAG, "Invalid data [%s_%lu_%lu]", "ADC1", chan_num, data);
                 }
-                /**
-                 * Because printing is slow, so every time you call `ulTaskNotifyTake`, it will immediately return.
-                 * To avoid a task watchdog timeout, add a delay here. When you replace the way you process the data,
-                 * usually you don't need this delay (as this task will block for a while).
-                 */
-                //vTaskDelay(1);
-            } else if (ret == ESP_ERR_TIMEOUT) {
-                //We try to read `EXAMPLE_READ_LEN` until API returns timeout, which means there's no available data
-                break;
             }
-        //}
+            /**
+             * Because printing is slow, so every time you call `ulTaskNotifyTake`, it will immediately return.
+             * To avoid a task watchdog timeout, add a delay here. When you replace the way you process the data,
+             * usually you don't need this delay (as this task will block for a while).
+             */
+            //vTaskDelay(1);
+        } else if (ret == ESP_ERR_TIMEOUT) {
+            //We try to read `EXAMPLE_READ_LEN` until API returns timeout, which means there's no available data
+            break;
+        }
+
         adcChrono.endCycle();
     }
     

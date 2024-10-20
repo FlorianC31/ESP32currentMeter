@@ -92,7 +92,7 @@ extern "C" void app_main(void) {
     wifi_init_sta();
     bufferMutex = xSemaphoreCreateMutex();
 
-    adcDataQueue = xQueueCreate(SAMPLES_IN_BUFF, sizeof(std::array<uint8_t, NB_CHANNELS>));
+    adcDataQueue = xQueueCreate(NB_SAMPLES, sizeof(std::array<uint8_t, NB_CHANNELS>));
     if (adcDataQueue == NULL) {
         ESP_LOGE(TAG, "Failed to create ADC data queue");
         vTaskDelete(NULL);
