@@ -88,9 +88,6 @@ void adc_task(void *pvParameters) {
          */
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         adcChrono.startCycle();
-        freqChrono.endCycle();
-        freqChrono.startCycle();
-
         
 
         ret = adc_continuous_read(handle, result, ADC_BUFFER_SIZE, &ret_num, 0);
