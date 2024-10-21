@@ -1,7 +1,6 @@
 #include "chrono.h"
 #include "def.h"
 
-#include <esp_log.h>
 #include <esp_timer.h>
 
 
@@ -55,14 +54,16 @@ void Chrono::startCycle()
     m_startTime = esp_timer_get_time();
 
     if (m_lastStartTime == 0) {
+        m_lastStartTime = m_startTime;
         return;
     }
 
-    m_curentFreq = 1000000 / (m_lastStartTime - m_startTime);          // Hz
+    m_curentFreq = 1000000 / (m_startTime - m_lastStartTime);          // Hz
     m_lastStartTime = m_startTime;
 
-    if (m_nbIgnored == 0) {
+    if (m_nbIgnored <= 0) {
         m_freq.add(m_curentFreq, m_iter);
+        ESP_LOGI(m_name.c_str(), "startCycle : %fHz", m_curentFreq);
     }
     else {
         m_nbIgnored--;
@@ -83,9 +84,14 @@ void Chrono::endCycle()
         return;
     }
 
+    
+
     int end_time = esp_timer_get_time();
     int adc_conversion_time = end_time - m_startTime;
     m_duration.add(adc_conversion_time, m_iter);
+
+    
+    ESP_LOGI(m_name.c_str(), "endCycle : %iµs", adc_conversion_time);
 
     float cpuUsage = adc_conversion_time * m_curentFreq / 10000.;
     m_cpuUsage.add(cpuUsage, m_iter);
