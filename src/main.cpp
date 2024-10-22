@@ -7,8 +7,8 @@ TaskHandle_t process_task_handle = NULL;
 QueueHandle_t adcDataQueue = NULL;
 
 Chrono chrono("Process", 48, 10, 10);
-Chrono printChrono("Print", 48, 10, 10);
-Chrono adcChrono("Adc", 48, 10, 10);
+Chrono chronoChrono("Chrono", 48, 0.2, 10);
+Chrono adcChrono("Adc", 48, 2, 10);
 
 SemaphoreHandle_t bufferMutex = NULL;
 uint8_t bufferPos = 0;

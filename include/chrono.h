@@ -10,7 +10,7 @@
 class Chrono
 {
 public:
-    Chrono(std::string name, int limitFreq, int limitCpu, int m_nbIgnored = 0, int printFreq = 0);
+    Chrono(std::string name, int limitFreq, float limitCpu, int m_nbIgnored = 0, int printFreq = 0);
     ~Chrono();
     void startCycle();
     void endCycle();
@@ -24,13 +24,13 @@ private:
         std::atomic<float> mean = 0.;
         std::atomic<int> nbOverDeadline = 0;
         bool freq = false;
-        int limit = 0.;
+        float limit = 0.;
 
         void add(float value, int nbIter) {
             if (value > max) {
                 max = value;
             }
-            if (value < min) {
+            else if (value < min) {
                 min = value;
             }
             if ((freq && value < static_cast<float>(limit)) || (!freq && value > static_cast<float>(limit))){
@@ -39,9 +39,9 @@ private:
             mean = (mean * nbIter + value) / (nbIter + 1);
         }
 
-        void init(int lim, bool isFreq = false) {
+        void init(float lim, bool isFreq = false) {
             max = 0.;
-            min = 0.;
+            min = 1000000.;
             mean = 0.;
             limit = lim;
             freq = isFreq;
@@ -72,7 +72,7 @@ private:
     std::string m_name;
 
     int m_limitFreq;
-    int m_limitCpu;
+    float m_limitCpu;
     int m_nbIgnored = 0;
     int m_printFreq;
 

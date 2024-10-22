@@ -115,7 +115,9 @@ void adc_task(void *pvParameters) {
             break;
         }
 
+        chronoChrono.startCycle();
         adcChrono.endCycle();
+        chronoChrono.endCycle();
     }
     
     ESP_ERROR_CHECK(adc_continuous_stop(handle));

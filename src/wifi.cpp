@@ -44,7 +44,7 @@ static esp_err_t get_adc_chrono_handler(httpd_req_t *req) {
     //xSemaphoreTake(mutex, portMAX_DELAY); // Prendre le mutex pour accéder aux valeurs ADC en toute sécurité
     
     
-    std::string json_string = adcChrono.getGlobalStats();
+    std::string json_string = "{\"chronos\":[" + adcChrono.getGlobalStats() + "," + chronoChrono.getGlobalStats() + "]}";
     //xSemaphoreGive(mutex); // Libérer le mutex
     
     httpd_resp_set_type(req, "application/json");
