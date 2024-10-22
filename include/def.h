@@ -10,10 +10,12 @@
 #include <driver/gpio.h>
 #include "nvs_flash.h"
 #include <esp_log.h>
+#include "circularBuffer.h"
 
 #include <array>
 #include <vector>
 #include <string>
+#include <atomic>
 
 #ifndef UNUSED
 #define UNUSED (void)
@@ -30,6 +32,8 @@
 #define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)       // µs
 #define TENSION_ID      (NB_CURRENTS + 0)
 #define VREF_ID         (NB_CURRENTS + 1)
+#define NB_BUFF_CYCLES  8
+#define BUFFER_SIZE     (NB_SAMPLES * NB_BUFF_CYCLES)
 
 
 // Measure configuration
@@ -67,6 +71,8 @@ extern QueueHandle_t adcDataQueue;
 extern SemaphoreHandle_t bufferMutex;
 extern std::array<std::array<uint8_t, NB_CHANNELS>, NB_SAMPLES> adcBuffer;
 extern uint8_t bufferPos;
+
+CircularBuffer adcBuffer;
 
 
 #endif      // __DEF_H

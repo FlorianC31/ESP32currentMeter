@@ -65,7 +65,8 @@
         "optional": "cpp",
         "chip_revision.h": "c",
         "rtc.h": "c",
-        "def.h": "c"
+        "def.h": "c",
+        "gpio.h": "c"
     },
     "sonarlint.pathToCompileCommands": "${workspaceFolder}\\.pio\\build\\esp32-s3-devkitc-1\\bootloader\\compile_commands.json"
 }
