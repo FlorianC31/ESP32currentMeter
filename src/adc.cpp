@@ -36,8 +36,8 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
     adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX];
     dig_cfg.pattern_num = NB_CHANNELS;
     for (int i = 0; i < NB_CHANNELS; i++) {
-        adc_pattern[i].atten = ADC_ATTEN_DB_11;
-        adc_pattern[i].channel = ADC_CHANNELS[i] & 0x7;
+        adc_pattern[i].atten = ADC_ATTEN_DB_12;
+        adc_pattern[i].channel = ADC_CHANNELS[i];
         adc_pattern[i].unit = ADC_UNIT_1;
         adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
 
@@ -86,25 +86,32 @@ void adc_task(void *pvParameters) {
 
         ret = adc_continuous_read(handle, result, ADC_BUFFER_SIZE, &ret_num, 0);
         if (ret == ESP_OK) {
+            uint8_t channelId = 0;
             //ESP_LOGI("TASK", "ret is %x, ret_num is %"PRIu32" bytes", ret, ret_num);
             for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
                 adc_digi_output_data_t *p = (adc_digi_output_data_t*)&result[i];
-                uint16_t chan_num = static_cast<uint16_t>(p->type2.channel);
+                uint16_t chanNum = static_cast<uint16_t>(p->type2.channel);
                 uint16_t data = static_cast<uint16_t>(p->type2.data);
                 /* Check the channel number validation, the data is invalid if the channel num exceed the maximum channel */
-                if (chan_num < SOC_ADC_CHANNEL_NUM(ADC_UNIT_1)) {
-                    ESP_LOGI(TAG, "Unit: %s, Channel: %u, Value: %u", "ADC1", chan_num, data);
-                    adcData[chan_num] = data;
+                if (chanNum < SOC_ADC_CHANNEL_NUM(ADC_UNIT_1) && ADC_CHANNELS[channelId] == chanNum) {
+                    //ESP_LOGI(TAG, "Unit: %s, Channel: %u, Value: %u", "ADC1", chanNum, data);
+                    adcData[channelId] = data;
                 } else {
-                    ESP_LOGW(TAG, "Invalid data [%s_%u_%u]", "ADC1", chan_num, data);
+                    ESP_LOGW(TAG, "Invalid data [%s_%u_%u]", "ADC1", chanNum, data);
                 }
 
-                /*if (xQueueSend(adcDataQueue, &adcData, 1) != pdPASS) {
-                    ESP_LOGE(TAG, "Error sending ADC data to the queue");
+                channelId++;
+                if (channelId == NB_CHANNELS) {
+                    channelId = 0;
+                    if (xQueueSend(adcDataQueue, &adcData, 1) != pdPASS) {
+                        ESP_LOGE(TAG, "Error sending ADC data to the queue");
+                    }
+                    else {
+                        //ESP_LOGE(TAG, "ADC data successfully sent to the queue - %i", nbSample);
+                    }
                 }
-                else {
-                    //ESP_LOGE(TAG, "ADC data successfully sent to the queue - %i", nbSample);
-                }*/
+
+                
             }
             /**
              * Because printing is slow, so every time you call `ulTaskNotifyTake`, it will immediately return.
