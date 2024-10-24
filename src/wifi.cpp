@@ -88,11 +88,12 @@ static esp_err_t get_memory_handler(httpd_req_t *req) {
     cJSON_AddNumberToObject(json, "Size of adcBuffer (kB)", float(sizeof(adcBuffer)) / 1000.);
     cJSON_AddNumberToObject(json, "Size of adcDataQueue (kB)", float(sizeof(adcDataQueue)) / 1000.);
 
-    std::string json_string = cJSON_Print(json);
+    char* jsonStr = cJSON_Print(json);
 
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, json_string.c_str(), json_string.length());
+    httpd_resp_send(req, jsonStr, strlen(jsonStr));
 
+    free(jsonStr);
     cJSON_Delete(json); 
 
     return ESP_OK;

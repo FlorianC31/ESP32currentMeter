@@ -83,12 +83,13 @@ std::string CircularBuffer::getData()
         }
     }
 
-    std::string bufferString = cJSON_Print(json);
+    char* jsonStr = cJSON_Print(json);
+    std::string bufferString(jsonStr);
+    free(jsonStr);
+
     cJSON_Delete(json);
 
     bufferTotalChrono.endCycle();
-
-
     return bufferString;
 }
 
