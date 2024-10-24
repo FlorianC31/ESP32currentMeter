@@ -4,6 +4,7 @@
 #include "def.h"
 #include "cJSON.h"
 
+
 /**
  * @brief A thread-safe circular buffer implementation for ESP32
  * 
@@ -16,14 +17,15 @@
  */
 class CircularBuffer {
 public:
-    CircularBuffer();
+    CircularBuffer(std::string name);
     ~CircularBuffer();
 
-    bool write(const std::array<uint16_t, NB_CHANNELS> &data);
+    bool addData(const std::array<uint16_t, NB_CHANNELS> &data);
     bool calcOrderBuffer();
-    cJSON* getJson();
+    std::string getData();
 
 private:
+    std::string m_name;
     std::array<std::array<int, BUFFER_SIZE>, NB_CHANNELS> m_orderedBuffer;
     std::array<std::array<uint16_t, NB_CHANNELS>, BUFFER_SIZE> m_buffer;
     u_int16_t m_index;

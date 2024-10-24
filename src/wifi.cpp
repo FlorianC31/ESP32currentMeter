@@ -3,6 +3,8 @@
 #include "esp_event.h"
 #include <esp_heap_caps.h>
 
+#include "globalVar.h"
+
 #include "wifi.h"
 #include "adc.h"
 //#include "measure.h"
@@ -41,14 +43,21 @@ static esp_err_t get_adc_data_handler(httpd_req_t *req) {
  */
 static esp_err_t get_adc_chrono_handler(httpd_req_t *req) {
 
-    //xSemaphoreTake(mutex, portMAX_DELAY); // Prendre le mutex pour accéder aux valeurs ADC en toute sécurité
-    
-    
-    std::string json_string = "{\"chronos\":[" + adcChrono.getGlobalStats() + "," + chronoChrono.getGlobalStats() + "]}";
-    //xSemaphoreGive(mutex); // Libérer le mutex
-    
+    bool first = true;
+    std::string jsonStr = "{";
+    for (Chrono* &chrono : chronoList) {
+        if (first) {
+            first = false;
+        }
+        else {
+            jsonStr += ",";
+        }
+        jsonStr += "\"" + chrono->getName() + "\":" + chrono->getGlobalStats();
+    }
+    jsonStr += "}";
+        
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, json_string.c_str(), json_string.length());
+    httpd_resp_send(req, jsonStr.c_str(), jsonStr.length());
 
     return ESP_OK;
 }
@@ -56,12 +65,11 @@ static esp_err_t get_adc_chrono_handler(httpd_req_t *req) {
 
 static esp_err_t get_adc_buffer_handler(httpd_req_t *req) {
 
-    /*std::string json_string = measure.getBufferJson();
+    std::string json_string = adcBuffer.getData();
     
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json_string.c_str(), json_string.length());
-    */
-
+    
     return ESP_OK;
 }
 

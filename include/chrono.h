@@ -10,11 +10,12 @@
 class Chrono
 {
 public:
-    Chrono(std::string name, int limitFreq, float limitCpu, int m_nbIgnored = 0, int printFreq = 0);
+    Chrono(std::string name, float limitCpu, int m_nbIgnored = 0, int printFreq = 0);
     ~Chrono();
     void startCycle();
     void endCycle();
     std::string getGlobalStats();
+    std::string getName() {return m_name;}
 
 private:
 
@@ -71,7 +72,6 @@ private:
 
     std::string m_name;
 
-    int m_limitFreq;
     float m_limitCpu;
     int m_nbIgnored = 0;
     int m_printFreq;
@@ -79,7 +79,6 @@ private:
     uint64_t m_iter = 0;
     int m_startTime;
     int m_lastStartTime;
-    float m_curentFreq = 0.;
     
     Data m_freq;
     Data m_duration;

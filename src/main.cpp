@@ -1,20 +1,23 @@
 #include "def.h"
+#include "globalVar.h"
+
 #include "adc.h"
 #include "chrono.h"
 #include "wifi.h"
+#include "circularBuffer.h"
 
 TaskHandle_t process_task_handle = NULL;
 QueueHandle_t adcDataQueue = NULL;
 
-Chrono chrono("Process", 48, 10, 10);
-Chrono chronoChrono("Chrono", 48, 0.2, 10);
-Chrono adcChrono("Adc", 48, 2, 10);
+Chrono chrono("Process", 10, 10);
+Chrono chronoChrono("Chrono", 0.2, 10);
+Chrono adcChrono("Adc", 2, 10);
+Chrono bufferChrono("Buffer", 2);
 
-CircularBuffer adcBuffer();
+CircularBuffer adcBuffer("adcBuffer");
 
-SemaphoreHandle_t bufferMutex = NULL;
-uint8_t bufferPos = 0;
-std::array<std::array<uint8_t, NB_CHANNELS>, NB_SAMPLES> adcBuffer;
+std::vector<Chrono*> chronoList = {&adcChrono, &chronoChrono, &bufferChrono};
+
 
 /**
  * @brief Process and log task function
@@ -34,21 +37,14 @@ void process_and_log_task(void *pvParameters) {
     vrefValues = "Vref Values";
 
     //uint16_t nbSamples = 0;
-    std::array<uint8_t, NB_CHANNELS> adcData;
+    std::array<uint16_t, NB_CHANNELS> adcData;
 
     while (1) {
         if (xQueueReceive(adcDataQueue, &adcData, 1) == pdPASS) {
             chrono.endCycle();
             chrono.startCycle();
 
-            xSemaphoreTake(bufferMutex, portMAX_DELAY);
-            adcBuffer[bufferPos] = adcData;
-
-            bufferPos++;
-            if (bufferPos == NB_SAMPLES) {
-                bufferPos = 0;
-            }
-            xSemaphoreGive(bufferMutex);
+            adcBuffer.addData(adcData);
 
 
             /*tensionValues += ";" + std::to_string(adcData[TENSION_ID]);
@@ -91,9 +87,8 @@ extern "C" void app_main(void) {
 
     //adc_init();
     wifi_init_sta();
-    bufferMutex = xSemaphoreCreateMutex();
 
-    adcDataQueue = xQueueCreate(NB_SAMPLES, sizeof(std::array<uint8_t, NB_CHANNELS>));
+    adcDataQueue = xQueueCreate(NB_SAMPLES * NB_QUEUE_CYCLES, sizeof(std::array<uint16_t, NB_CHANNELS>));
     if (adcDataQueue == NULL) {
         ESP_LOGE(TAG, "Failed to create ADC data queue");
         vTaskDelete(NULL);

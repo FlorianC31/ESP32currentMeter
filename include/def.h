@@ -10,7 +10,6 @@
 #include <driver/gpio.h>
 #include "nvs_flash.h"
 #include <esp_log.h>
-#include "circularBuffer.h"
 
 #include <array>
 #include <vector>
@@ -26,14 +25,17 @@
 // ADC configuration
 #define NB_SAMPLES      128
 #define ANALYZED_PERIOD 20.480                                  // ms (A little bit more than 1/50Hz = 20ms)
+#define MAIN_FREQ       (1000 / ANALYZED_PERIOD)                // hz
 #define NB_CURRENTS     6
 #define NB_CHANNELS     (NB_CURRENTS + 2)
-#define SAMPLE_FREQ     (1000 * NB_SAMPLES / ANALYZED_PERIOD)       // Hz
-#define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)       // µs
+#define SAMPLE_FREQ     (1000 * NB_SAMPLES / ANALYZED_PERIOD)   // Hz
+#define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)   // µs
 #define TENSION_ID      (NB_CURRENTS + 0)
 #define VREF_ID         (NB_CURRENTS + 1)
-#define NB_BUFF_CYCLES  8
+#define NB_QUEUE_CYCLES 4
+#define NB_BUFF_CYCLES  2
 #define BUFFER_SIZE     (NB_SAMPLES * NB_BUFF_CYCLES)
+#define CHRN_FREQ_LIM   50                                      // hz
 
 
 // Measure configuration
@@ -53,26 +55,8 @@
 #define MIN_AC_FREQ   40.          // Hz
 #define MAX_AC_FREQ   60.          // Hz
 
-// 5 currents channels and 1 tension (y = A . x + B)
-const float CALIB_A_COEFFS[] = {0.0387, 0.0168, 0.0162, 0.0233, 0.0538, 0.412572};       // 5 currents channels and 1 tension (y = A . x + B)
-const float CALIB_B_COEFFS[] = {0., 0., 0., 0., 0., 0.}; //{0.014, -0.006, -0.054, -0.0515, 0.0395, 0.2065};
-
-
-extern TaskHandle_t adc_task_handle;
-extern TaskHandle_t process_task_handle;
-
-class Chrono;
-extern Chrono adcChrono;
-extern Chrono chronoChrono;
-
-// Define the queue handle
-extern QueueHandle_t adcDataQueue;
-
-extern SemaphoreHandle_t bufferMutex;
-extern std::array<std::array<uint8_t, NB_CHANNELS>, NB_SAMPLES> adcBuffer;
-extern uint8_t bufferPos;
-
-CircularBuffer adcBuffer;
-
+// 6 currents channels and 1 tension (y = A . x + B)
+//const float CALIB_A_COEFFS[] = {0., 0., 0., 0., 0., 0.};       // 5 currents channels and 1 tension (y = A . x + B)
+//const float CALIB_B_COEFFS[] = {0., 0., 0., 0., 0., 0.}; //{0.014, -0.006, -0.054, -0.0515, 0.0395, 0.2065};
 
 #endif      // __DEF_H

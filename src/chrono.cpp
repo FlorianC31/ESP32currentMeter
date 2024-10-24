@@ -3,7 +3,6 @@
 
 #include <esp_timer.h>
 
-
 /**
  * @brief Constructor for the Chrono class.
  *
@@ -14,9 +13,8 @@
  * @param printFreq The frequency (number of itterations) at which to print the timing statistics.
  * @param debug if true, the chrono will be printed at the end if each cycle
  */
-Chrono::Chrono(std::string name, int limitFreq, float limitCpu, int nbIgnored, int printFreq) :
-    m_name("Chrono" + name),
-    m_limitFreq(limitFreq),
+Chrono::Chrono(std::string name, float limitCpu, int nbIgnored, int printFreq) :
+    m_name(name),
     m_limitCpu(limitCpu),
     m_nbIgnored(nbIgnored),
     m_printFreq(printFreq),
@@ -38,9 +36,9 @@ Chrono::~Chrono()
 void Chrono::init()
 {
     m_iter = 0;
-    m_freq.init(m_limitFreq, true);
+    m_freq.init(CHRN_FREQ_LIM, true);
     m_cpuUsage.init(m_limitCpu);
-    int limitDuration = m_limitCpu * 10000 / m_limitFreq;
+    int limitDuration = m_limitCpu * 10000 / CHRN_FREQ_LIM;
     m_duration.init(limitDuration);
 }
 
@@ -58,11 +56,11 @@ void Chrono::startCycle()
         return;
     }
 
-    m_curentFreq = 1000000. / (m_startTime - m_lastStartTime);          // Hz
+    float curentFreq = 1000000. / (m_startTime - m_lastStartTime);          // Hz
     m_lastStartTime = m_startTime;
 
     if (m_nbIgnored <= 0) {
-        m_freq.add(m_curentFreq, m_iter);
+        m_freq.add(curentFreq, m_iter);
     }
     else {
         m_nbIgnored--;
@@ -83,14 +81,12 @@ void Chrono::endCycle()
         return;
     }
 
-    
-
     int end_time = esp_timer_get_time();
     int adc_conversion_time = end_time - m_startTime;
     m_duration.add(adc_conversion_time, m_iter);
 
 
-    float cpuUsage = adc_conversion_time * m_curentFreq / 10000.;
+    float cpuUsage = adc_conversion_time * MAIN_FREQ / 10000.;
     m_cpuUsage.add(cpuUsage, m_iter);
 
     m_iter++;
@@ -124,7 +120,7 @@ std::string Chrono::getGlobalStats()
 
     cJSON *json = cJSON_CreateObject();
 
-    cJSON_AddStringToObject(json, "Chrono", m_name.c_str());
+    //cJSON_AddStringToObject(json, "Chrono", m_name.c_str());
     cJSON_AddNumberToObject(json, "Number of iterations", m_iter);
 
     cJSON_AddItemToObject(json, "Frequency", m_freq.getJson("Hz", m_iter));

@@ -1,9 +1,12 @@
 #include "circularBuffer.h"
+#include "chrono.h"
+#include "globalVar.h"
 
 /**
  * @brief Construct a new Circular Buffer object
  */
-CircularBuffer::CircularBuffer() : 
+CircularBuffer::CircularBuffer(std::string name) :
+    m_name(name),
     m_index(0)
 {
     m_mutex = xSemaphoreCreateMutex();
@@ -14,7 +17,9 @@ CircularBuffer::CircularBuffer() :
  */
 CircularBuffer::~CircularBuffer()
 {
-    DEL_OBJ(m_mutex);
+    if (m_mutex != nullptr) {
+        vSemaphoreDelete(m_mutex);
+    }
 }
 
 /**
@@ -23,7 +28,7 @@ CircularBuffer::~CircularBuffer()
  * @param value The value to write
  * @return true if write was successful
  */
-bool CircularBuffer::write(const std::array<uint16_t, NB_CHANNELS> &data)
+bool CircularBuffer::addData(const std::array<uint16_t, NB_CHANNELS> &data)
 {
     if (xSemaphoreTake(m_mutex, portMAX_DELAY) == pdTRUE) {
         m_buffer[m_index] = data;
@@ -41,11 +46,11 @@ bool CircularBuffer::calcOrderBuffer()
         for (uint8_t channelId = 0; channelId < NB_CHANNELS; channelId++) {
             uint16_t i = 0;
             for (uint16_t j = m_index; j < BUFFER_SIZE; j++) {
-                m_orderedBuffer[i][channelId] = static_cast<int>(m_buffer[j][channelId]);
+                m_orderedBuffer[channelId][i] = static_cast<int>(m_buffer[j][channelId]);
                 i++;
             }
             for (uint16_t j = 0; j < m_index; j++) {
-                m_orderedBuffer[i][channelId] = static_cast<int>(m_buffer[j][channelId]);
+                m_orderedBuffer[channelId][i] = static_cast<int>(m_buffer[j][channelId]);
                 i++;
             }
         }
@@ -63,8 +68,9 @@ bool CircularBuffer::calcOrderBuffer()
  * @param channelNames Optional array of channel names
  * @return std::string JSON representation of the buffer
  */
-cJSON* CircularBuffer::getJson()
+std::string CircularBuffer::getData()
 {
+    bufferChrono.startCycle();
     cJSON* json = cJSON_CreateObject();
 
     if (calcOrderBuffer()) {
@@ -88,6 +94,11 @@ cJSON* CircularBuffer::getJson()
         }
     }
 
-    return json;
+    std::string bufferString = cJSON_Print(json);
+    cJSON_Delete(json); 
+
+    bufferChrono.endCycle();
+
+    return bufferString;
 }
 

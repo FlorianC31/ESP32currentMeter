@@ -1,9 +1,8 @@
-#include "adc.h"
-#include "chrono.h"
-
 #include <string.h>
 
-
+#include "globalVar.h"
+#include "adc.h"
+#include "chrono.h"
 
 static const char *TAG = "ADC";
 
