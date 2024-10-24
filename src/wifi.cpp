@@ -12,12 +12,84 @@
 #include "ntp.h"
 
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 
 
 // Variable volatile utilisée pour déclencher des actions en réponse aux requêtes HTTP
 static volatile bool actionFlag = false;
 
+void log_socket_states() {
+    ESP_LOGI("HTTP", "Socket states:");
+    for (int i = 0; i < CONFIG_LWIP_MAX_SOCKETS; i++) {
+        int error = 0;
+        socklen_t len = sizeof(error);
+        if (getsockopt(i, SOL_SOCKET, SO_ERROR, &error, &len) == 0) {
+            ESP_LOGI("HTTP", "Socket %d is active, error state: %d", i, error);
+        }
+    }
+}
 
+
+httpd_handle_t server = NULL;
+
+void cleanup_networking() {
+    if (server) {
+        ESP_LOGI("HTTP", "Starting cleanup");
+        log_socket_states();  // Log initial socket states
+        
+        // Log initial memory state
+        multi_heap_info_t info_start;
+        heap_caps_get_info(&info_start, MALLOC_CAP_DEFAULT);
+        ESP_LOGI("HTTP", "Cleanup start - Memory: %.3f kB", 
+                 info_start.total_allocated_bytes / 1000.0f);
+
+        // Close all active sessions
+        for (int sock_fd = 0; sock_fd < CONFIG_LWIP_MAX_SOCKETS; sock_fd++) {
+            if (httpd_sess_get_ctx(server, sock_fd)) {
+                ESP_LOGI("HTTP", "Closing session for socket %d", sock_fd);
+                httpd_sess_trigger_close(server, sock_fd);
+                // Add small delay to allow closure
+                vTaskDelay(pdMS_TO_TICKS(50));
+            }
+        }
+
+        // Stop the server
+        ESP_LOGI("HTTP", "Stopping HTTP server");
+        //httpd_stop(server);
+        server = NULL;
+
+        // Force socket cleanup at TCP/IP level
+        ESP_LOGI("HTTP", "Forcing socket cleanup");
+        for (int i = 0; i < CONFIG_LWIP_MAX_SOCKETS; i++) {
+            close(i);
+        }
+
+        // Try to force memory cleanup
+        ESP_LOGI("HTTP", "Attempting memory cleanup");
+        for (int i = 0; i < 3; i++) {  // Try multiple times
+            size_t free_size = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+            if (free_size > 1024) {
+                void* temp = heap_caps_malloc(free_size - 1024, MALLOC_CAP_8BIT);
+                if (temp) {
+                    heap_caps_free(temp);
+                }
+            }
+            vTaskDelay(pdMS_TO_TICKS(50));  // Give some time for cleanup
+        }
+
+        log_socket_states();  // Log final socket states
+
+        // Log final memory state
+        multi_heap_info_t info_end;
+        heap_caps_get_info(&info_end, MALLOC_CAP_DEFAULT);
+        ESP_LOGI("HTTP", "Cleanup complete - Memory: %.3f kB (Delta: %.3f kB)", 
+                 info_end.total_allocated_bytes / 1000.0f,
+                 (info_end.total_allocated_bytes - info_start.total_allocated_bytes) / 1000.0f);
+    }
+}
 
 /**
  * @brief Handler pour obtenir les données ADC via une requête HTTP GET.
@@ -27,10 +99,11 @@ static volatile bool actionFlag = false;
  * @return esp_err_t ESP_OK si la requête est traitée avec succès.
  */
 static esp_err_t get_adc_data_handler(httpd_req_t *req) {
-    /*std::string json_string = measure.getJson();
+    //std::string json_string = measure.getJson();
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, json_string.c_str(), json_string.length());*/
-    
+    httpd_resp_send(req, " ", 1);
+    httpd_resp_set_hdr(req, "Connection", "close");
+    httpd_stop(server);
     return ESP_OK;
 }
 
@@ -42,6 +115,8 @@ static esp_err_t get_adc_data_handler(httpd_req_t *req) {
  * @return esp_err_t ESP_OK si la requête est traitée avec succès.
  */
 static esp_err_t get_adc_chrono_handler(httpd_req_t *req) {
+    ESP_LOGI("HTTP", "Handling request for URI: %s on socket: %d", 
+            req->uri, httpd_req_to_sockfd(req));
 
     bool first = true;
     std::string jsonStr = "{";
@@ -57,24 +132,39 @@ static esp_err_t get_adc_chrono_handler(httpd_req_t *req) {
     jsonStr += "}";
         
     httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "close");
     httpd_resp_send(req, jsonStr.c_str(), jsonStr.length());
+    httpd_sess_trigger_close(server, httpd_req_to_sockfd(req));
+
+    //cleanup_networking();
+    //httpd_stop(server);
+    log_socket_states();
 
     return ESP_OK;
 }
 
+// TODO : try this : https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/protocols/esp_http_server.html#application-example
+
+
 
 static esp_err_t get_adc_buffer_handler(httpd_req_t *req) {
+    ESP_LOGI("HTTP", "Handling request for URI: %s on socket: %d", 
+        req->uri, httpd_req_to_sockfd(req));
+
 
     std::string json_string = adcBuffer.getData();
     
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json_string.c_str(), json_string.length());
+    httpd_resp_set_hdr(req, "Connection", "close");
     
     return ESP_OK;
 }
 
 
 static esp_err_t get_memory_handler(httpd_req_t *req) {
+    ESP_LOGI("HTTP", "Handling request for URI: %s on socket: %d", 
+        req->uri, httpd_req_to_sockfd(req));
 
     cJSON *json = cJSON_CreateObject();
 
@@ -92,6 +182,7 @@ static esp_err_t get_memory_handler(httpd_req_t *req) {
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, jsonStr, strlen(jsonStr));
+    httpd_resp_set_hdr(req, "Connection", "close");
 
     free(jsonStr);
     cJSON_Delete(json); 
@@ -100,6 +191,8 @@ static esp_err_t get_memory_handler(httpd_req_t *req) {
 }
 
 static esp_err_t get_time_handler(httpd_req_t *req) {
+    ESP_LOGI("HTTP", "Handling request for URI: %s on socket: %d", 
+        req->uri, httpd_req_to_sockfd(req));
 
     cJSON *json = cJSON_CreateObject();
 
@@ -120,6 +213,7 @@ static esp_err_t get_time_handler(httpd_req_t *req) {
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json_string.c_str(), json_string.length());
+    httpd_resp_set_hdr(req, "Connection", "close");
 
     cJSON_Delete(json);
 
@@ -139,8 +233,53 @@ static esp_err_t trigger_action_handler(httpd_req_t *req) {
     //xSemaphoreGive(mutex); // Libérer le mutex
     
     httpd_resp_send(req, "Action triggered", HTTPD_RESP_USE_STRLEN);
+    httpd_resp_set_hdr(req, "Connection", "close");
     return ESP_OK;
 }
+
+static esp_err_t favicon_get_handler(httpd_req_t *req) {
+    ESP_LOGI("HTTP", "Handling request for URI: %s on socket: %d", 
+        req->uri, httpd_req_to_sockfd(req));
+    httpd_resp_set_hdr(req, "Connection", "close");
+    httpd_resp_send(req, "", 0);  // Send empty response
+    return ESP_OK;
+}
+
+int http_conn_handler(httpd_handle_t hd, int sockfd) {
+    multi_heap_info_t info;
+    heap_caps_get_info(&info, MALLOC_CAP_DEFAULT);
+    ESP_LOGI("HTTP", "Connection established. Socket fd: %d, Allocated heap: %.3f kB", 
+             sockfd, info.total_allocated_bytes / 1000.0f);
+    log_socket_states();
+    return ESP_OK;
+}
+
+void http_disconn_handler(httpd_handle_t hd, int sockfd) {
+    ESP_LOGI("HTTP", "Connection closing started for socket: %d", sockfd);
+    log_socket_states();  // Log state before socket closes
+    
+    struct sockaddr_in addr;
+    socklen_t addr_size = sizeof(addr);
+    if (getpeername(sockfd, (struct sockaddr*)&addr, &addr_size) == 0) {
+        ESP_LOGI("HTTP", "Socket %d was connected to port %d", 
+                 sockfd, 
+                 ntohs(addr.sin_port));
+    }
+    
+    multi_heap_info_t info;
+    heap_caps_get_info(&info, MALLOC_CAP_DEFAULT);
+    ESP_LOGI("HTTP", "Memory before socket %d close: %.3f kB", 
+             sockfd, info.total_allocated_bytes / 1000.0f);
+    
+    close(sockfd);
+    
+    log_socket_states();  // Log state after socket closes
+    
+    heap_caps_get_info(&info, MALLOC_CAP_DEFAULT);
+    ESP_LOGI("HTTP", "Memory after socket %d close: %.3f kB", 
+             sockfd, info.total_allocated_bytes / 1000.0f);
+}
+
 
 /**
  * @brief Démarre le serveur web HTTP.
@@ -156,7 +295,13 @@ httpd_handle_t start_webserver(void) {
 
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    httpd_handle_t server = NULL;
+    config.keep_alive_enable = false;
+    config.max_open_sockets = 3;
+    config.lru_purge_enable = true;
+    config.recv_wait_timeout = 1;  // 1 second timeout
+    config.send_wait_timeout = 1;
+    config.open_fn = http_conn_handler;
+    config.close_fn = http_disconn_handler;
     
     if (httpd_start(&server, &config) == ESP_OK) {
         httpd_uri_t uri_getAdcData = {
@@ -206,6 +351,14 @@ httpd_handle_t start_webserver(void) {
             .user_ctx = NULL
         };
         httpd_register_uri_handler(server, &uri_post);
+
+        httpd_uri_t uri_favicon = {
+            .uri      = "/favicon.ico",
+            .method   = HTTP_GET,
+            .handler  = favicon_get_handler,
+            .user_ctx = NULL
+        };
+        httpd_register_uri_handler(server, &uri_favicon);
     }
     
     ESP_LOGW(TAG, "Web Server correctly initialized");

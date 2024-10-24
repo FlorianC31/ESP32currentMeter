@@ -8,6 +8,7 @@
 
 TaskHandle_t process_task_handle = NULL;
 QueueHandle_t adcDataQueue = NULL;
+TaskHandle_t memory_handle = NULL;
 
 Chrono chrono("Process", 10, 10);
 Chrono chronoChrono("Chrono", 0.2, 10);
@@ -67,17 +68,23 @@ void process_and_log_task(void *pvParameters) {
     }
 }
 
-void printMemory() {
+void memory_task(void *pvParameters) {
     static const char* TAG = "Memory";
 
     multi_heap_info_t info;
-    heap_caps_get_info(&info, MALLOC_CAP_DEFAULT);
 
-    ESP_LOGW(TAG, "Total heap size (kB): %f", float(info.total_free_bytes + info.total_allocated_bytes) / 1000.);
-    ESP_LOGW(TAG, "Free heap size (kB): %f", float(info.total_free_bytes) / 1000.);
-    ESP_LOGW(TAG, "Allocated heap size (kB): %f", float(info.total_allocated_bytes) / 1000.);
-    ESP_LOGW(TAG, "Minimum free heap size (kB): %f", float(info.minimum_free_bytes) / 1000.);
+    while(1) {
+        heap_caps_get_info(&info, MALLOC_CAP_DEFAULT);
+
+        //ESP_LOGW(TAG, "Total heap size (kB): %f", float(info.total_free_bytes + info.total_allocated_bytes) / 1000.);
+        //ESP_LOGW(TAG, "Free heap size (kB): %f", float(info.total_free_bytes) / 1000.);
+        ESP_LOGW(TAG, "Allocated heap size (kB): %f", float(info.total_allocated_bytes) / 1000.);
+        //ESP_LOGW(TAG, "Minimum free heap size (kB): %f", float(info.minimum_free_bytes) / 1000.);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }
+
+
 
 
 extern "C" void app_main(void) {
@@ -96,15 +103,11 @@ extern "C" void app_main(void) {
     }
 
     start_webserver();
-    //printMemory();
-    
-    //vTaskDelay(pdMS_TO_TICKS(3*1000));
-    //printMemory();
 
     xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 4, &process_task_handle, 0);
-    printMemory();
     xTaskCreatePinnedToCore(adc_task, "ADC Task", 8192, NULL, 5, &adc_task_handle, 1);
-    printMemory();
+    xTaskCreatePinnedToCore(memory_task, "MEMORY Task", 8192, NULL, 5, &memory_handle, 1);
+
 
     
 
