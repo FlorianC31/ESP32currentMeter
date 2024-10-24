@@ -12,11 +12,12 @@ QueueHandle_t adcDataQueue = NULL;
 Chrono chrono("Process", 10, 10);
 Chrono chronoChrono("Chrono", 0.2, 10);
 Chrono adcChrono("Adc", 2, 10);
-Chrono bufferChrono("Buffer", 2);
+Chrono bufferMutexChrono("Buffer Mutex", 2);
+Chrono bufferTotalChrono("Buffer Total", 2);
 
 CircularBuffer adcBuffer("adcBuffer");
 
-std::vector<Chrono*> chronoList = {&adcChrono, &chronoChrono, &bufferChrono};
+std::vector<Chrono*> chronoList = {&adcChrono, &chronoChrono, &bufferMutexChrono, &bufferTotalChrono};
 
 
 /**

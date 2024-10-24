@@ -21,13 +21,11 @@ public:
     ~CircularBuffer();
 
     bool addData(const std::array<uint16_t, NB_CHANNELS> &data);
-    bool calcOrderBuffer();
     std::string getData();
 
 private:
     std::string m_name;
-    std::array<std::array<int, BUFFER_SIZE>, NB_CHANNELS> m_orderedBuffer;
-    std::array<std::array<uint16_t, NB_CHANNELS>, BUFFER_SIZE> m_buffer;
+    std::array<std::array<int, BUFFER_SIZE>, NB_CHANNELS> m_buffer;
     u_int16_t m_index;
     SemaphoreHandle_t m_mutex;
 };

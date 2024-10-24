@@ -31,7 +31,9 @@ CircularBuffer::~CircularBuffer()
 bool CircularBuffer::addData(const std::array<uint16_t, NB_CHANNELS> &data)
 {
     if (xSemaphoreTake(m_mutex, portMAX_DELAY) == pdTRUE) {
-        m_buffer[m_index] = data;
+        for (uint8_t channelId = 0; channelId < NB_CHANNELS ; channelId++) {
+            m_buffer[channelId][m_index] = data[channelId];
+        }
         m_index = (m_index + 1) % BUFFER_SIZE;
         xSemaphoreGive(m_mutex);
         return true;
@@ -39,28 +41,6 @@ bool CircularBuffer::addData(const std::array<uint16_t, NB_CHANNELS> &data)
     return false;
 }
 
-
-bool CircularBuffer::calcOrderBuffer()
-{
-    if (xSemaphoreTake(m_mutex, portMAX_DELAY) == pdTRUE) {
-        for (uint8_t channelId = 0; channelId < NB_CHANNELS; channelId++) {
-            uint16_t i = 0;
-            for (uint16_t j = m_index; j < BUFFER_SIZE; j++) {
-                m_orderedBuffer[channelId][i] = static_cast<int>(m_buffer[j][channelId]);
-                i++;
-            }
-            for (uint16_t j = 0; j < m_index; j++) {
-                m_orderedBuffer[channelId][i] = static_cast<int>(m_buffer[j][channelId]);
-                i++;
-            }
-        }
-        xSemaphoreGive(m_mutex);
-        return true;
-    }
-    else {
-        return false;
-    }
-}
 
 /**
  * @brief Convert the entire buffer to JSON object
@@ -70,12 +50,21 @@ bool CircularBuffer::calcOrderBuffer()
  */
 std::string CircularBuffer::getData()
 {
-    bufferChrono.startCycle();
+    bufferTotalChrono.startCycle();
     cJSON* json = cJSON_CreateObject();
+    std::array<cJSON*, NB_CHANNELS> jsonArrays;
 
-    if (calcOrderBuffer()) {
+    bufferMutexChrono.startCycle();
+    if (xSemaphoreTake(m_mutex, portMAX_DELAY) == pdTRUE) {
+        cJSON_AddNumberToObject(json, "bufferIndex", m_index);
+
         for (uint8_t channelId = 0; channelId < NB_CHANNELS; channelId++) {
-            cJSON* array = cJSON_CreateIntArray(m_orderedBuffer[channelId].data(), m_orderedBuffer[channelId].size());
+            jsonArrays[channelId] = cJSON_CreateIntArray(m_buffer[channelId].data(), m_buffer[channelId].size());
+        }
+        bufferMutexChrono.endCycle();
+        xSemaphoreGive(m_mutex);
+
+        for (uint8_t channelId = 0; channelId < NB_CHANNELS; channelId++) {
             std::string arrayName;
             if (channelId < TENSION_ID) {
                 arrayName = "Current" + std::to_string(channelId + 1);
@@ -90,14 +79,15 @@ std::string CircularBuffer::getData()
                 arrayName = "Error";
             }
 
-            cJSON_AddItemToObject(json, arrayName.c_str(), array);
+            cJSON_AddItemToObject(json, arrayName.c_str(), jsonArrays[channelId]);
         }
     }
 
     std::string bufferString = cJSON_Print(json);
-    cJSON_Delete(json); 
+    cJSON_Delete(json);
 
-    bufferChrono.endCycle();
+    bufferTotalChrono.endCycle();
+
 
     return bufferString;
 }

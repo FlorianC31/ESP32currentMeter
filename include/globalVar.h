@@ -12,7 +12,8 @@ extern TaskHandle_t process_task_handle;
 
 extern Chrono adcChrono;
 extern Chrono chronoChrono;
-extern Chrono bufferChrono;
+extern Chrono bufferMutexChrono;
+extern Chrono bufferTotalChrono;
 
 extern CircularBuffer adcBuffer;
 

@@ -85,11 +85,15 @@ static esp_err_t get_memory_handler(httpd_req_t *req) {
     cJSON_AddNumberToObject(json, "Free heap size (kB)", float(info.total_free_bytes) / 1000.);
     cJSON_AddNumberToObject(json, "Allocated heap size (kB)", float(info.total_allocated_bytes) / 1000.);
     cJSON_AddNumberToObject(json, "Minimum free heap size (kB)", float(info.minimum_free_bytes) / 1000.);
+    cJSON_AddNumberToObject(json, "Size of adcBuffer (kB)", float(sizeof(adcBuffer)) / 1000.);
+    cJSON_AddNumberToObject(json, "Size of adcDataQueue (kB)", float(sizeof(adcDataQueue)) / 1000.);
 
     std::string json_string = cJSON_Print(json);
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json_string.c_str(), json_string.length());
+
+    cJSON_Delete(json); 
 
     return ESP_OK;
 }
@@ -115,6 +119,8 @@ static esp_err_t get_time_handler(httpd_req_t *req) {
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json_string.c_str(), json_string.length());
+
+    cJSON_Delete(json);
 
     return ESP_OK;
 }
