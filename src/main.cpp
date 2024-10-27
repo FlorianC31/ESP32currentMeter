@@ -32,38 +32,15 @@ void process_and_log_task(void *pvParameters) {
     static const char* TAG = "PROCESS_TASK";
 
     ESP_LOGI(TAG, "Process and log task starting");
-    std::string tensionValues;
-    std::string vrefValues;
-    tensionValues.reserve(14 + NB_SAMPLES * 1 * 5);
-    vrefValues.reserve(14 + NB_SAMPLES * 1 * 5); 
-    tensionValues = "Tension Values";
-    vrefValues = "Vref Values";
 
-    //uint16_t nbSamples = 0;
     std::array<uint16_t, NB_CHANNELS> adcData;
 
     while (1) {
         if (xQueueReceive(adcDataQueue, &adcData, 1) == pdPASS) {
-            chrono.endCycle();
-            chrono.startCycle();
 
             adcBuffer.addData(adcData);
 
 
-            /*tensionValues += ";" + std::to_string(adcData[TENSION_ID]);
-            vrefValues += ";" + std::to_string(adcData[VREF_ID]);
-
-            nbSamples++;
-
-            if (nbSamples == 1 * NB_SAMPLES) {
-                printChrono.startCycle();
-                //ESP_LOGW(TAG, "%s", tensionValues.c_str());
-                //ESP_LOGW(TAG, "%s", vrefValues.c_str());
-                printChrono.endCycle();
-                tensionValues = "Tension Values";
-                vrefValues = "Vref Values";
-                nbSamples = 0;
-            }*/
         
         }
     }

@@ -31,12 +31,11 @@ public:
     Measure();
     ~Measure();
     void init();
-    void adcCallback(volatile int* data);
+    void cal(std::array<uint16_t, NB_CHANNELS> adcData);
     std::string getJsonOld();
     std::string getJson();
     void packetTask();
     bool popFromQueue(Data &data);
-    std::string getBufferJson();
 
 
 private:
@@ -60,8 +59,6 @@ private:
     cJSON* serializeData(Data &data);
 
     bool m_firstError;
-    //uint16_t m_iPeriodTimeBuffer;
-    //std::vector<float> m_periodTimeBuffer;
 };
 
 extern Measure measure;

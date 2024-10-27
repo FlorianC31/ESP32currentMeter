@@ -59,8 +59,21 @@
 #define MIN_AC_FREQ   40.          // Hz
 #define MAX_AC_FREQ   60.          // Hz
 
-// 6 currents channels and 1 tension (y = A . x + B)
-//const float CALIB_A_COEFFS[] = {0., 0., 0., 0., 0., 0.};       // 5 currents channels and 1 tension (y = A . x + B)
-//const float CALIB_B_COEFFS[] = {0., 0., 0., 0., 0., 0.}; //{0.014, -0.006, -0.054, -0.0515, 0.0395, 0.2065};
+// Calibration coeff
+#define CURRENT1_COEF_A     1.
+#define CURRENT2_COEF_A     1.
+#define CURRENT3_COEF_A     1.
+#define CURRENT4_COEF_A     1.
+#define CURRENT5_COEF_A     1.
+#define CURRENT6_COEF_A     1.
+#define TENSION_COEF_A      1.
+
+#define CURRENT1_COEF_B     0.
+#define CURRENT2_COEF_B     0.
+#define CURRENT3_COEF_B     0.
+#define CURRENT4_COEF_B     0.
+#define CURRENT5_COEF_B     0.
+#define CURRENT6_COEF_B     0.
+#define TENSION_COEF_B      0.
 
 #endif      // __DEF_H
