@@ -4,6 +4,7 @@
 #include "adc.h"
 #include "chrono.h"
 #include "wifi.h"
+#include "server.h"
 #include "circularBuffer.h"
 
 TaskHandle_t process_task_handle = NULL;

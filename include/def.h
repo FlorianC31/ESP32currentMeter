@@ -4,12 +4,16 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
+
 #include <esp_system.h>
 #include <esp_timer.h>
+#include <esp_http_server.h>
 #include <esp_adc/adc_continuous.h>
+#include <esp_log.h>
+#include <esp_netif.h>
+
 #include <driver/gpio.h>
 #include "nvs_flash.h"
-#include <esp_log.h>
 
 #include <array>
 #include <vector>

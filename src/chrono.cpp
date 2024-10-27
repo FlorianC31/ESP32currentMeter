@@ -117,8 +117,7 @@ void Chrono::print()
  */
 std::string Chrono::getGlobalStats()
 {
-
-    cJSON *json = cJSON_CreateObject();
+    cJSON* json = cJSON_CreateObject();
 
     //cJSON_AddStringToObject(json, "Chrono", m_name.c_str());
     cJSON_AddNumberToObject(json, "Number of iterations", m_iter);
@@ -127,8 +126,10 @@ std::string Chrono::getGlobalStats()
     cJSON_AddItemToObject(json, "Task Duration", m_duration.getJson("µs", m_iter));
     cJSON_AddItemToObject(json, "CPU Usage", m_cpuUsage.getJson("%", m_iter));
 
-    std::string globalStats = cJSON_Print(json);
-    cJSON_Delete(json); 
+    char* jsonStr = cJSON_Print(json);
+    std::string globalStats(jsonStr);
+    cJSON_Delete(json);
+    free(jsonStr);
 
     return globalStats;
 }
