@@ -5,8 +5,7 @@
 /**
  * @brief Construct a new Circular Buffer object
  */
-CircularBuffer::CircularBuffer(std::string name) :
-    m_name(name),
+CircularBuffer::CircularBuffer() :
     m_index(0)
 {
     m_mutex = xSemaphoreCreateMutex();

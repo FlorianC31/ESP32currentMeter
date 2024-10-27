@@ -6,6 +6,7 @@
 #include "wifi.h"
 #include "server.h"
 #include "circularBuffer.h"
+#include "measure.h"
 
 TaskHandle_t process_task_handle = NULL;
 QueueHandle_t adcDataQueue = NULL;
@@ -16,11 +17,11 @@ Chrono chronoChrono("Chrono", 0.2, 10);
 Chrono adcChrono("Adc", 2, 10);
 Chrono bufferMutexChrono("Buffer Mutex", 2);
 Chrono bufferTotalChrono("Buffer Total", 2);
-
-CircularBuffer adcBuffer("adcBuffer");
-
 std::vector<Chrono*> chronoList = {&adcChrono, &chronoChrono, &bufferMutexChrono, &bufferTotalChrono};
 
+CircularBuffer adcBuffer = CircularBuffer();
+Measure measure = Measure();
+ErrorManager errorManager = ErrorManager();
 
 /**
  * @brief Process and log task function
@@ -37,11 +38,8 @@ void process_and_log_task(void *pvParameters) {
 
     while (1) {
         if (xQueueReceive(adcDataQueue, &adcData, 1) == pdPASS) {
-
             adcBuffer.addData(adcData);
-
-
-        
+            measure.cal(adcData);        
         }
     }
 }

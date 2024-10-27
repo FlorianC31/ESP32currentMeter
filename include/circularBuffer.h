@@ -17,14 +17,13 @@
  */
 class CircularBuffer {
 public:
-    CircularBuffer(std::string name);
+    CircularBuffer();
     ~CircularBuffer();
 
     bool addData(const std::array<uint16_t, NB_CHANNELS> &data);
     std::string getData();
 
 private:
-    std::string m_name;
     std::array<std::array<int, BUFFER_SIZE>, NB_CHANNELS> m_buffer;
     u_int16_t m_index;
     SemaphoreHandle_t m_mutex;

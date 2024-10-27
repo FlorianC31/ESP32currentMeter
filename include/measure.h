@@ -59,6 +59,9 @@ private:
     cJSON* serializeData(Data &data);
 
     bool m_firstError;
+
+    std::array<float, NB_CURRENTS> m_calibCoeffA;
+    std::array<float, NB_CURRENTS> m_calibCoeffB;
 };
 
 extern Measure measure;

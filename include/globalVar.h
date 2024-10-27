@@ -7,6 +7,7 @@
 #include "chrono.h"
 #include "circularBuffer.h"
 #include "errorManager.h"
+#include "measure.h"
 
 extern TaskHandle_t adc_task_handle;
 extern TaskHandle_t process_task_handle;
@@ -22,5 +23,7 @@ extern CircularBuffer adcBuffer;
 extern QueueHandle_t adcDataQueue;
 
 extern ErrorManager errorManager;
+
+extern Measure mesure;
 
 #endif      // __GLOBAL_VAR_H__

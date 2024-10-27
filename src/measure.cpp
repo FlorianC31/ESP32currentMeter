@@ -3,11 +3,6 @@
 #include "errorManager.h"
 #include "ntp.h"
 
-Measure measure;
-
-std::array<float, NB_CURRENTS> CALIB_A_COEFFS = {CURRENT1_COEF_A, CURRENT2_COEF_A, CURRENT3_COEF_A, CURRENT4_COEF_A, CURRENT5_COEF_A, CURRENT6_COEF_A};
-std::array<float, NB_CURRENTS> CALIB_B_COEFFS = {CURRENT1_COEF_B, CURRENT2_COEF_B, CURRENT3_COEF_B, CURRENT4_COEF_B, CURRENT5_COEF_B, CURRENT6_COEF_B};
-
 Measure::Measure() :
     m_currents(NB_CURRENTS),
     m_data(nullptr),
@@ -17,6 +12,8 @@ Measure::Measure() :
     for (uint8_t i = 0; i < NB_CURRENTS; i++) {
         m_currents[i].setChannelId(i);
     }
+    m_calibCoeffA = {CURRENT1_COEF_A, CURRENT2_COEF_A, CURRENT3_COEF_A, CURRENT4_COEF_A, CURRENT5_COEF_A, CURRENT6_COEF_A};
+    m_calibCoeffB = {CURRENT1_COEF_B, CURRENT2_COEF_B, CURRENT3_COEF_B, CURRENT4_COEF_B, CURRENT5_COEF_B, CURRENT6_COEF_B};
     init();
 }
 
@@ -48,7 +45,7 @@ void Measure::cal(std::array<uint16_t, NB_CHANNELS> adcData)
     // Compute the a
     m_tension.setVal(TENSION_COEF_A * ((float)adcData[TENSION_ID] - (float)adcData[VREF_ID]) + TENSION_COEF_B);
     for (uint8_t currentId = 0; currentId < NB_CURRENTS; currentId++) {
-        m_currents[currentId].setVal(CALIB_A_COEFFS[currentId] * ((float)adcData[currentId] - (float)adcData[VREF_ID]) + CALIB_B_COEFFS[currentId]);
+        m_currents[currentId].setVal(m_calibCoeffA[currentId] * ((float)adcData[currentId] - (float)adcData[VREF_ID]) + m_calibCoeffB[currentId]);
     }
     
     float czPoint(0.);

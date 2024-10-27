@@ -15,9 +15,9 @@ static esp_err_t get_adc_buffer_handler(httpd_req_t *req) {
 }
 
 static esp_err_t get_adc_data_handler(httpd_req_t *req) {
-    //std::string json_string = measure.getJson();
+    std::string json_string = measure.getJson();
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, " ", 1);
+    httpd_resp_send(req, json_string.c_str(), json_string.length());
     return ESP_OK;
 }
 
