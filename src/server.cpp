@@ -6,12 +6,17 @@
 
 
 static esp_err_t get_adc_buffer_handler(httpd_req_t *req) {
-    std::string json_string = adcBuffer.getData();
+
+    // header Content-Type configuration
+    httpd_resp_set_type(req, "application/octet-stream");
     
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, json_string.c_str(), json_string.length());
+    // Sending binary data
+    esp_err_t res = httpd_resp_send(req, 
+        reinterpret_cast<const char*>(adcBuffer.getBinData()->data()),
+        sizeof(float) * NB_SIGNALS * BUFFER_SIZE
+    );
     
-    return ESP_OK;
+    return res;
 }
 
 static esp_err_t get_adc_data_handler(httpd_req_t *req) {

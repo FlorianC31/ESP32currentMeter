@@ -7,6 +7,7 @@
 #include "server.h"
 #include "circularBuffer.h"
 #include "measure.h"
+#include "fft.h"
 
 TaskHandle_t process_task_handle = NULL;
 QueueHandle_t adcDataQueue = NULL;
@@ -15,13 +16,26 @@ TaskHandle_t memory_handle = NULL;
 Chrono chrono("Process", 10, 10);
 Chrono chronoChrono("Chrono", 0.2, 10);
 Chrono adcChrono("Adc", 2, 10);
+Chrono fftChrono("FFT", 50);
 Chrono bufferMutexChrono("Buffer Mutex", 2);
 Chrono bufferTotalChrono("Buffer Total", 2);
-std::vector<Chrono*> chronoList = {&adcChrono, &chronoChrono, &bufferMutexChrono, &bufferTotalChrono};
+std::vector<Chrono*> chronoList = {&adcChrono, &fftChrono, &chronoChrono, &bufferMutexChrono, &bufferTotalChrono};
 
 CircularBuffer adcBuffer = CircularBuffer();
 Measure measure = Measure();
 ErrorManager errorManager = ErrorManager();
+
+std::array<float, NB_SIGNALS> calibCoeffA = {CURRENT1_COEF_A, CURRENT2_COEF_A, CURRENT3_COEF_A, CURRENT4_COEF_A, CURRENT5_COEF_A, CURRENT6_COEF_A, TENSION_COEF_A};
+
+std::array<float, NB_SIGNALS> convertRawData(std::array<uint16_t, NB_CHANNELS> adcRawData)
+{
+    std::array<float, NB_SIGNALS> convertedData;
+    for (uint8_t channelId = 0; channelId < NB_SIGNALS; channelId++) {
+        convertedData[channelId] = calibCoeffA[channelId] * (adcRawData[channelId] - adcRawData[VREF_ID]);
+    }
+    return convertedData;
+}
+
 
 /**
  * @brief Process and log task function
@@ -34,12 +48,28 @@ void process_and_log_task(void *pvParameters) {
 
     ESP_LOGI(TAG, "Process and log task starting");
 
-    std::array<uint16_t, NB_CHANNELS> adcData;
+    std::array<uint16_t, NB_CHANNELS> adcRawData;
+    std::array<float, NB_SIGNALS> adcConvertedData;
+
+    fft_config_t *real_fft_plan = fft_init(NB_SAMPLES, FFT_REAL, FFT_FORWARD, NULL, NULL);
 
     while (1) {
-        if (xQueueReceive(adcDataQueue, &adcData, 1) == pdPASS) {
-            adcBuffer.addData(adcData);
-            measure.cal(adcData);        
+        if (xQueueReceive(adcDataQueue, &adcRawData, 1) == pdPASS) {
+            adcConvertedData = convertRawData(adcRawData);
+            adcBuffer.addData(adcConvertedData);
+
+            fftChrono.startCycle();
+            real_fft_plan->input = adcConvertedData.data();
+            fftChrono.endCycle();
+            fft_execute(real_fft_plan);
+
+            ESP_LOGW(TAG, "DC component : %f\n", real_fft_plan->output[0]);  // DC is at [0]
+            for (int k = 1 ; k < real_fft_plan->size / 2 ; k++) {
+                ESP_LOGW(TAG, "%d-th freq : %f+j%f\n", k, real_fft_plan->output[2*k], real_fft_plan->output[2*k+1]);
+            }
+            ESP_LOGW(TAG, "Middle component : %f\n", real_fft_plan->output[1]);  // N/2 is real and stored at [1]
+
+            //measure.cal(adcData);        
         }
     }
 }
@@ -81,8 +111,9 @@ extern "C" void app_main(void) {
     start_webserver();
 
     xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 4, &process_task_handle, 0);
-    xTaskCreatePinnedToCore(adc_task, "ADC Task", 8192, NULL, 5, &adc_task_handle, 1);
-    xTaskCreatePinnedToCore(memory_task, "MEMORY Task", 8192, NULL, 5, &memory_handle, 1);
+    xTaskCreatePinnedToCore(adc_task, "ADC Task", 8192, NULL, 5, &adc_task_handle, 0);
+
+    //xTaskCreatePinnedToCore(memory_task, "MEMORY Task", 8192, NULL, 5, &memory_handle, 1);
 
 
     

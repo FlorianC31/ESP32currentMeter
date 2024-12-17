@@ -32,6 +32,7 @@
 #define MAIN_FREQ       (1000 / ANALYZED_PERIOD)                // hz
 #define NB_CURRENTS     6
 #define NB_CHANNELS     (NB_CURRENTS + 2)
+#define NB_SIGNALS      (NB_CHANNELS - 1)
 #define SAMPLE_FREQ     (1000 * NB_SAMPLES / ANALYZED_PERIOD)   // Hz
 #define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)   // µs
 #define TENSION_ID      (NB_CURRENTS + 0)
@@ -60,13 +61,13 @@
 #define MAX_AC_FREQ   60.          // Hz
 
 // Calibration coeff
-#define CURRENT1_COEF_A     1.
-#define CURRENT2_COEF_A     1.
-#define CURRENT3_COEF_A     1.
-#define CURRENT4_COEF_A     1.
-#define CURRENT5_COEF_A     1.
-#define CURRENT6_COEF_A     1.
-#define TENSION_COEF_A      1.
+#define CURRENT1_COEF_A     0.0279666256231008
+#define CURRENT2_COEF_A     0.011393810439041
+#define CURRENT3_COEF_A     0.011393810439041
+#define CURRENT4_COEF_A     0.0165728151840597
+#define CURRENT5_COEF_A     0.0379793681301368
+#define CURRENT6_COEF_A     0.1
+#define TENSION_COEF_A      0.178719296343853
 
 #define CURRENT1_COEF_B     0.
 #define CURRENT2_COEF_B     0.

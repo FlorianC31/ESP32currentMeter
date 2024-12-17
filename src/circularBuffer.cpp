@@ -2,24 +2,22 @@
 #include "chrono.h"
 #include "globalVar.h"
 
+
 /**
  * @brief Construct a new Circular Buffer object
  */
 CircularBuffer::CircularBuffer() :
     m_index(0)
 {
-    m_mutex = xSemaphoreCreateMutex();
+    m_writeBuffer = &m_buffer1;
+    m_readBuffer = &m_buffer2;
 }
 
 /**
  * @brief Destroy the Circular Buffer object
  */
 CircularBuffer::~CircularBuffer()
-{
-    if (m_mutex != nullptr) {
-        vSemaphoreDelete(m_mutex);
-    }
-}
+{}
 
 /**
  * @brief Write a single element to the buffer
@@ -27,17 +25,14 @@ CircularBuffer::~CircularBuffer()
  * @param value The value to write
  * @return true if write was successful
  */
-bool CircularBuffer::addData(const std::array<uint16_t, NB_CHANNELS> &data)
+bool CircularBuffer::addData(const std::array<float, NB_SIGNALS> &data)
 {
-    if (xSemaphoreTake(m_mutex, portMAX_DELAY) == pdTRUE) {
-        for (uint8_t channelId = 0; channelId < NB_CHANNELS ; channelId++) {
-            m_buffer[channelId][m_index] = data[channelId];
-        }
-        m_index = (m_index + 1) % BUFFER_SIZE;
-        xSemaphoreGive(m_mutex);
-        return true;
+    auto* currentWriteBuffer = m_writeBuffer.load();
+    for (uint8_t channelId = 0; channelId < NB_SIGNALS; channelId++) {
+        currentWriteBuffer->at(channelId)[m_index] = data[channelId];
     }
-    return false;
+    m_index = (m_index + 1) % BUFFER_SIZE;
+    return true;
 }
 
 
@@ -49,46 +44,67 @@ bool CircularBuffer::addData(const std::array<uint16_t, NB_CHANNELS> &data)
  */
 std::string CircularBuffer::getData()
 {
-    bufferTotalChrono.startCycle();
+    /*bufferTotalChrono.startCycle();
     cJSON* json = cJSON_CreateObject();
     std::array<cJSON*, NB_CHANNELS> jsonArrays;
 
-    bufferMutexChrono.startCycle();
-    if (xSemaphoreTake(m_mutex, portMAX_DELAY) == pdTRUE) {
-        cJSON_AddNumberToObject(json, "bufferIndex", m_index);
+    
+    ESP_LOGI("TAG", "  Buffer1 -> %p", &m_buffer1);
+    ESP_LOGI("TAG", "  Buffer1 -> %p", &m_buffer2);
 
-        for (uint8_t channelId = 0; channelId < NB_CHANNELS; channelId++) {
-            jsonArrays[channelId] = cJSON_CreateIntArray(m_buffer[channelId].data(), m_buffer[channelId].size());
-        }
-        bufferMutexChrono.endCycle();
-        xSemaphoreGive(m_mutex);
+    ESP_LOGI("TAG", "Avant échange :");
+    ESP_LOGI("TAG", "  WriteBuffer -> %p", (void*)m_writeBuffer.load());
+    ESP_LOGI("TAG", "  ReadBuffer  -> %p", (void*)m_readBuffer.load());
 
-        for (uint8_t channelId = 0; channelId < NB_CHANNELS; channelId++) {
-            std::string arrayName;
-            if (channelId < TENSION_ID) {
-                arrayName = "Current" + std::to_string(channelId + 1);
-            }
-            else if (channelId == TENSION_ID) {
-                arrayName = "Tension";
-            }
-            else if (channelId == VREF_ID) {
-                arrayName = "Vref";
-            }
-            else  {
-                arrayName = "Error";
-            }
+    m_readBuffer.store(std::atomic_exchange(&m_writeBuffer, m_readBuffer.load()));
 
-            cJSON_AddItemToObject(json, arrayName.c_str(), jsonArrays[channelId]);
-        }
+    ESP_LOGI("TAG", "Après échange :");
+    ESP_LOGI("TAG", "  WriteBuffer -> %p", (void*)m_writeBuffer.load());
+    ESP_LOGI("TAG", "  ReadBuffer  -> %p", (void*)m_readBuffer.load());
+
+    cJSON_AddNumberToObject(json, "bufferIndex", m_index);
+
+    
+    ESP_LOGI("TAG", "Flag0");
+    
+    auto* currentReadBuffer = m_readBuffer.load(); 
+    for (uint8_t channelId = 0; channelId < NB_CHANNELS; channelId++) {
+        jsonArrays[channelId] = cJSON_CreateIntArray(currentReadBuffer->at(channelId).data(), currentReadBuffer->at(channelId).size());
     }
 
-    char* jsonStr = cJSON_Print(json);
-    std::string bufferString(jsonStr);
-    free(jsonStr);
+    ESP_LOGI("TAG", "Flag1");
 
-    cJSON_Delete(json);
+    for (uint8_t channelId = 0; channelId < NB_CHANNELS; channelId++) {
+        std::string arrayName;
+        if (channelId < TENSION_ID) {
+            arrayName = "Current" + std::to_string(channelId + 1);
+        }
+        else if (channelId == TENSION_ID) {
+            arrayName = "Tension";
+        }
+        else if (channelId == VREF_ID) {
+            arrayName = "Vref";
+        }
+        else  {
+            arrayName = "Error";
+        }
 
-    bufferTotalChrono.endCycle();
-    return bufferString;
+        cJSON_AddItemToObject(json, arrayName.c_str(), jsonArrays[channelId]);
+    }
+    
+
+    std::unique_ptr<char, decltype(&free)> jsonStr(cJSON_Print(json), free);
+    if (!jsonStr) {
+        return "{}"; // Return empty JSON on string generation failure
+    }
+
+    return std::string(jsonStr.get());*/
+    return "";
 }
 
+
+std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* CircularBuffer::getBinData()
+{
+    m_readBuffer.store(std::atomic_exchange(&m_writeBuffer, m_readBuffer.load()));
+    return m_readBuffer.load();
+}

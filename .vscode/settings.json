@@ -72,7 +72,10 @@
         "format": "cpp",
         "iomanip": "cpp",
         "span": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "adc_filter.h": "c",
+        "complex": "cpp",
+        "esp_http_server.h": "c"
     },
     "sonarlint.pathToCompileCommands": "${workspaceFolder}\\.pio\\build\\esp32-s3-devkitc-1\\bootloader\\compile_commands.json"
 }

@@ -20,13 +20,16 @@ public:
     CircularBuffer();
     ~CircularBuffer();
 
-    bool addData(const std::array<uint16_t, NB_CHANNELS> &data);
+    bool addData(const std::array<float, NB_SIGNALS> &data);
+    std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* getBinData();
     std::string getData();
 
 private:
-    std::array<std::array<int, BUFFER_SIZE>, NB_CHANNELS> m_buffer;
+    std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS> m_buffer1;
+    std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS> m_buffer2;
+    std::atomic<std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>*> m_readBuffer;
+    std::atomic<std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>*> m_writeBuffer;
     u_int16_t m_index;
-    SemaphoreHandle_t m_mutex;
 };
 
 #endif // CIRCULAR_BUFFER_H
