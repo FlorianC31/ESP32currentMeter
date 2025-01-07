@@ -4,19 +4,25 @@
 #include "adc.h"
 #include "chrono.h"
 
+// Define the adc_timer_callback function
+void adc_timer_callback(void* arg) {
+    BaseType_t mustYield = pdFALSE;
+    vTaskNotifyGiveFromISR(adc_task_handle, &mustYield);
+}
+
 static const char *TAG = "ADC";
 
 TaskHandle_t adc_task_handle = NULL;
 
 
-static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
+/*static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
 {
     BaseType_t mustYield = pdFALSE;
     //Notify that ADC continuous driver has done enough number of conversions
     vTaskNotifyGiveFromISR(adc_task_handle, &mustYield);
 
     return (mustYield == pdTRUE);
-}
+}*/
 
 static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 {
@@ -63,9 +69,16 @@ void adc_task(void *pvParameters) {
     continuous_adc_init(&handle);
 
     adc_continuous_evt_cbs_t cbs;
-    cbs.on_conv_done = s_conv_done_cb;
+    //cbs.on_conv_done = s_conv_done_cb;
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(handle));
+
+    esp_timer_create_args_t timer_args;
+    timer_args.callback = &adc_timer_callback;
+    timer_args.name = "adc_timer";
+    esp_timer_handle_t timer;
+    ESP_ERROR_CHECK(esp_timer_create(&timer_args, &timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(timer, MAIN_PERIOD)); // 20ms = 50Hz
 
     std::array<uint16_t, NB_CHANNELS> adcData;
 

@@ -16,6 +16,7 @@
 #include "nvs_flash.h"
 
 #include <array>
+#include <span>
 #include <vector>
 #include <string>
 #include <atomic>
@@ -27,20 +28,20 @@
 #define DEL_OBJ(x) if(x) {delete x;x=nullptr;}
 
 // ADC configuration
-#define NB_SAMPLES      128
-#define ANALYZED_PERIOD 20.480                                  // ms (A little bit more than 1/50Hz = 20ms)
-#define MAIN_FREQ       (1000 / ANALYZED_PERIOD)                // hz
+#define NB_SAMPLES      128                                     // nb sample by main period
+#define MAIN_FREQ       50                                      // hz
+#define MAIN_PERIOD     (1000000 / MAIN_FREQ)                   // µs
 #define NB_CURRENTS     6
 #define NB_CHANNELS     (NB_CURRENTS + 2)
 #define NB_SIGNALS      (NB_CHANNELS - 1)
-#define SAMPLE_FREQ     (1000 * NB_SAMPLES / ANALYZED_PERIOD)   // Hz
-#define TIM_PERIOD      (ANALYZED_PERIOD * 1000 / NB_SAMPLES)   // µs
+#define SAMPLE_FREQ     (NB_SAMPLES * MAIN_FREQ)                // Hz
+#define TIM_PERIOD      (1000000 / MAIN_FREQ / NB_SAMPLES)      // µs
 #define TENSION_ID      (NB_CURRENTS + 0)
 #define VREF_ID         (NB_CURRENTS + 1)
 #define NB_QUEUE_CYCLES 4
 #define NB_BUFF_CYCLES  2
 #define BUFFER_SIZE     (NB_SAMPLES * NB_BUFF_CYCLES)
-#define CHRN_FREQ_LIM   50                                      // hz
+#define CHRN_FREQ_LIM   MAIN_FREQ                               // hz
 
 
 // Measure configuration
@@ -52,7 +53,7 @@
 #define IP_ADDRESS "192.168.1.24"
 #define NETMASK "255.255.255.0"
 #define GATEWAY "192.168.1.1"
-#define DNS_SERVER "8.8.8.8"
+#define DNS_SERVER "8.8.8.8"              // Google's DNS server: 8.8.8.8
 
 #define TIMEZONE "CET-1CEST,M3.5.0,M10.5.0/3"
 

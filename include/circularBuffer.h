@@ -21,15 +21,15 @@ public:
     ~CircularBuffer();
 
     bool addData(const std::array<float, NB_SIGNALS> &data);
-    std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* getBinData();
-    std::string getData();
+    std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* getData() {return m_readBuffer.load();}
 
 private:
+    u_int16_t m_index;
+    
     std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS> m_buffer1;
     std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS> m_buffer2;
     std::atomic<std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>*> m_readBuffer;
     std::atomic<std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>*> m_writeBuffer;
-    u_int16_t m_index;
 };
 
 #endif // CIRCULAR_BUFFER_H

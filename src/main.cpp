@@ -55,14 +55,19 @@ void process_and_log_task(void *pvParameters) {
     std::array<uint16_t, NB_CHANNELS> adcRawData;
     std::array<float, NB_SIGNALS> adcConvertedData;
 
-    fft_config_t *real_fft_plan = fft_init(NB_SAMPLES, FFT_REAL, FFT_FORWARD, NULL, NULL);
-
+    //fft_config_t *real_fft_plan = fft_init(BUFFER_SIZE, FFT_REAL, FFT_FORWARD, NULL, NULL);
+    
     while (1) {
         if (xQueueReceive(adcDataQueue, &adcRawData, 1) == pdPASS) {
+            processChrono.startCycle();
+            convertChrono.startCycle();
             adcConvertedData = convertRawData(adcRawData);
-            adcBuffer.addData(adcConvertedData);
+            convertChrono.endCycle();
+            if (adcBuffer.addData(adcConvertedData)) {
+                xTaskNotifyGive(fft_handle);
+            }
 
-            fftChrono.startCycle();
+            /*fftChrono.startCycle();
             real_fft_plan->input = adcConvertedData.data();
             fftChrono.endCycle();
             fft_execute(real_fft_plan);
@@ -71,12 +76,37 @@ void process_and_log_task(void *pvParameters) {
             for (int k = 1 ; k < real_fft_plan->size / 2 ; k++) {
                 ESP_LOGW(TAG, "%d-th freq : %f+j%f\n", k, real_fft_plan->output[2*k], real_fft_plan->output[2*k+1]);
             }
-            ESP_LOGW(TAG, "Middle component : %f\n", real_fft_plan->output[1]);  // N/2 is real and stored at [1]
+            ESP_LOGW(TAG, "Middle component : %f\n", real_fft_plan->output[1]);  // N/2 is real and stored at [1]*/
 
-            //measure.cal(adcData);        
+            //measure.cal(adcData);   
+            processChrono.endCycle();     
         }
     }
 }
+
+
+void fftTask(void *pvParameters) {
+    //static const char* TAG = "FFT";
+
+    fft_config_t *real_fft_plan = fft_init(BUFFER_SIZE, FFT_REAL, FFT_FORWARD, NULL, NULL);
+
+    while (1) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    
+        fftChrono.startCycle();
+        for (int signal = 0; signal < NB_SIGNALS; signal++) {
+            real_fft_plan->input = adcBuffer.getData()->at(signal).data();
+            fft_execute(real_fft_plan);
+            /*if (signal == 3) {
+                for (int k = 1 ; k <=7 ; k+=2) {
+                    ESP_LOGW(TAG, "Signal %d - Harmonic %d: %f+j%f", signal, k, real_fft_plan->output[2*k], real_fft_plan->output[2*k+1]);
+                }
+            }*/
+        }
+        fftChrono.endCycle();
+    }
+}
+
 
 void memory_task(void *pvParameters) {
     static const char* TAG = "Memory";
@@ -115,7 +145,8 @@ extern "C" void app_main(void) {
     start_webserver();
 
     xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 4, &process_task_handle, 0);
-    xTaskCreatePinnedToCore(adc_task, "ADC Task", 8192, NULL, 5, &adc_task_handle, 0);
+    xTaskCreatePinnedToCore(adc_task, "ADC Task", 8192, NULL, configMAX_PRIORITIES - 1, &adc_task_handle, 0);
+    xTaskCreatePinnedToCore(fftTask, "FFT Task", 8192, NULL, 5, &fft_handle, 0);
 
     //xTaskCreatePinnedToCore(memory_task, "MEMORY Task", 8192, NULL, 5, &memory_handle, 1);
 

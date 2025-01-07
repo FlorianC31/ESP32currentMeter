@@ -12,7 +12,7 @@ static esp_err_t get_adc_buffer_handler(httpd_req_t *req) {
     
     // Sending binary data
     esp_err_t res = httpd_resp_send(req, 
-        reinterpret_cast<const char*>(adcBuffer.getBinData()->data()),
+        reinterpret_cast<const char*>(adcBuffer.getData()->data()),
         sizeof(float) * NB_SIGNALS * BUFFER_SIZE
     );
     
@@ -80,9 +80,10 @@ static esp_err_t get_time_handler(httpd_req_t *req) {
     char buffer[100];
 
     // Formater la chaîne dans le tampon
-    snprintf(buffer, sizeof(buffer), "{\"Current time\": \"%02d:%02d:%02d %02d/%02d/%04d \"}",
+    snprintf(buffer, sizeof(buffer), "{\"Current time\": \"%02d:%02d:%02d %02d/%02d/%04d \", %s}",
              timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-             timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+             timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900,
+             initTime.c_str());
 
     std::string json_string(buffer);
 
@@ -175,4 +176,3 @@ void stop_webserver(httpd_handle_t server)
         httpd_stop(server);
     }
 }
-
