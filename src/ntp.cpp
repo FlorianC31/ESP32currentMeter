@@ -5,6 +5,22 @@
 #include <sys/time.h>
 #include <esp_log.h>
 
+std::string initTime = "";
+
+void setInitDate() {
+    time_t now = get_timestamp();
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+
+    char buffer[100];
+
+    // Formater la chaîne dans le tampon
+    snprintf(buffer, sizeof(buffer), "\"Init time\": \"%02d:%02d:%02d %02d/%02d/%04d \"",
+             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+             timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+
+    initTime = std::string(buffer);
+}
 
 
 void sync_time() {
@@ -38,6 +54,7 @@ void sync_time() {
         char strftime_buf[64];
         strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
         ESP_LOGI("sync_time", "The current date/time is: %s", strftime_buf);
+        setInitDate();
     }
 }
 

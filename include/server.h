@@ -5,5 +5,4 @@
 
 httpd_handle_t start_webserver(void);
 
-
 #endif  // __SERVER_H__

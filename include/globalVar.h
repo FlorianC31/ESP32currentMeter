@@ -3,6 +3,7 @@
 
 #include <freertos/FreeRTOS.h>
 #include <vector>
+#include <string>
 
 #include "chrono.h"
 #include "circularBuffer.h"
@@ -25,5 +26,7 @@ extern QueueHandle_t adcDataQueue;
 extern ErrorManager errorManager;
 
 extern Measure mesure;
+
+extern std::string initTime;
 
 #endif      // __GLOBAL_VAR_H__

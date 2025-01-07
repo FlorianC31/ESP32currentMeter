@@ -12,14 +12,18 @@
 TaskHandle_t process_task_handle = NULL;
 QueueHandle_t adcDataQueue = NULL;
 TaskHandle_t memory_handle = NULL;
+TaskHandle_t fft_handle = NULL;
 
-Chrono chrono("Process", 10, 10);
-Chrono chronoChrono("Chrono", 0.2, 10);
-Chrono adcChrono("Adc", 2, 10);
-Chrono fftChrono("FFT", 50);
+int nbIgnoredPeriods = 20;
+
+Chrono chronoChrono("Chrono", 0.2, 12);
+Chrono adcChrono("Adc", 3, nbIgnoredPeriods);
+Chrono fftChrono("FFT", 10, nbIgnoredPeriods / NB_BUFF_CYCLES);
+Chrono convertChrono("Conversion", 2, nbIgnoredPeriods * NB_SAMPLES);
+Chrono processChrono("Process", 2, nbIgnoredPeriods * NB_SAMPLES);
 Chrono bufferMutexChrono("Buffer Mutex", 2);
 Chrono bufferTotalChrono("Buffer Total", 2);
-std::vector<Chrono*> chronoList = {&adcChrono, &fftChrono, &chronoChrono, &bufferMutexChrono, &bufferTotalChrono};
+std::vector<Chrono*> chronoList = {&adcChrono, &fftChrono, &convertChrono, &processChrono};
 
 CircularBuffer adcBuffer = CircularBuffer();
 Measure measure = Measure();
