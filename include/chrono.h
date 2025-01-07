@@ -27,7 +27,7 @@ private:
         bool freq = false;
         float limit = 0.;
 
-        void add(float value, int nbIter) {
+        void add(float value, int nbIter, int elpasedTime = 0) {
             if (value > max) {
                 max = value;
             }
@@ -37,7 +37,17 @@ private:
             if ((freq && value < static_cast<float>(limit)) || (!freq && value > static_cast<float>(limit))){
                 nbOverDeadline++;
             }
-            mean = (mean * nbIter + value) / (nbIter + 1);
+            if (!freq) {
+                mean = (mean * nbIter + value) / (nbIter + 1);
+            }
+            else {
+                if (nbIter > 0) {
+                    mean = 1000000. / static_cast<float>(elpasedTime) * nbIter;
+                }
+                else {
+                    mean = 0.;
+                }
+            }
         }
 
         void init(float lim, bool isFreq = false) {
@@ -51,7 +61,7 @@ private:
         cJSON* getJson(std::string unity, uint64_t nbIter) {
             cJSON* json = cJSON_CreateObject();
             cJSON_AddNumberToObject(json, ("min(" + unity + ")").c_str(), min);
-            cJSON_AddNumberToObject(json, ("mean" + unity + ")").c_str(), mean);
+            cJSON_AddNumberToObject(json, ("mean(" + unity + ")").c_str(), mean);
             cJSON_AddNumberToObject(json, ("max(" + unity + ")").c_str(), max);
             if (freq) {
                 cJSON_AddNumberToObject(json, std::string("nbUnder " + std::to_string(limit) + unity + "(%)").c_str(), (float)nbOverDeadline / nbIter * 100);
@@ -79,6 +89,7 @@ private:
     uint64_t m_iter = 0;
     int m_startTime;
     int m_lastStartTime;
+    int m_globalStartTime;
     
     Data m_freq;
     Data m_duration;

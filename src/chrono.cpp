@@ -19,7 +19,8 @@ Chrono::Chrono(std::string name, float limitCpu, int nbIgnored, int printFreq) :
     m_nbIgnored(nbIgnored),
     m_printFreq(printFreq),
     m_startTime(0),
-    m_lastStartTime(0)
+    m_lastStartTime(0),
+    m_globalStartTime(0)
 {
     init();
 }
@@ -59,8 +60,12 @@ void Chrono::startCycle()
     float curentFreq = 1000000. / (m_startTime - m_lastStartTime);          // Hz
     m_lastStartTime = m_startTime;
 
-    if (m_nbIgnored <= 0) {
-        m_freq.add(curentFreq, m_iter);
+    if (m_nbIgnored == 0) {
+        m_globalStartTime = m_startTime;
+    }
+
+    if (m_nbIgnored < 0) {
+        m_freq.add(curentFreq, m_iter, (m_startTime - m_globalStartTime));
     }
     else {
         m_nbIgnored--;
