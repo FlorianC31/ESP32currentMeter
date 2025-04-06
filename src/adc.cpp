@@ -29,7 +29,7 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
     adc_continuous_handle_t handle = NULL;
 
     adc_continuous_handle_cfg_t adc_config;
-    adc_config.max_store_buf_size = ADC_BUFFER_SIZE;
+    adc_config.max_store_buf_size = ADC_BUFFER_SIZE * 2;
     adc_config.conv_frame_size = ADC_BUFFER_SIZE;
     ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
 
@@ -95,7 +95,7 @@ void adc_task(void *pvParameters) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         adcChrono.startCycle();
         
-
+        
         ret = adc_continuous_read(handle, result, ADC_BUFFER_SIZE, &ret_num, 0);
         if (ret == ESP_OK) {
             uint8_t channelId = 0;
@@ -124,16 +124,10 @@ void adc_task(void *pvParameters) {
                 }
 
                 
-            }
-            /**
-             * Because printing is slow, so every time you call `ulTaskNotifyTake`, it will immediately return.
-             * To avoid a task watchdog timeout, add a delay here. When you replace the way you process the data,
-             * usually you don't need this delay (as this task will block for a while).
-             */
-            //vTaskDelay(1);
+            }        
+
         } else if (ret == ESP_ERR_TIMEOUT) {
-            //We try to read `EXAMPLE_READ_LEN` until API returns timeout, which means there's no available data
-            break;
+            ESP_LOGE(TAG, "ADC Timeout error");
         }
 
         chronoChrono.startCycle();

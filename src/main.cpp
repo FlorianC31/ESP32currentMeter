@@ -29,7 +29,7 @@ CircularBuffer adcBuffer = CircularBuffer();
 Measure measure = Measure();
 ErrorManager errorManager = ErrorManager();
 
-std::array<float, NB_SIGNALS> calibCoeffA = {CURRENT1_COEF_A, CURRENT2_COEF_A, CURRENT3_COEF_A, CURRENT4_COEF_A, CURRENT5_COEF_A, CURRENT6_COEF_A, TENSION_COEF_A};
+std::array<float, NB_SIGNALS> calibCoeffA = {CURRENT1_COEF_A, CURRENT2_COEF_A, CURRENT3_COEF_A, CURRENT4_COEF_A, CURRENT5_COEF_A, CURRENT6_COEF_A, CURRENT7_COEF_A, CURRENT8_COEF_A, TENSION_COEF_A};
 
 std::array<float, NB_SIGNALS> convertRawData(std::array<uint16_t, NB_CHANNELS> adcRawData)
 {
@@ -40,6 +40,92 @@ std::array<float, NB_SIGNALS> convertRawData(std::array<uint16_t, NB_CHANNELS> a
     return convertedData;
 }
 
+float calcZeroCrossingIndex(float x1, float y1, float x2, float y2)
+{
+    float y0 = 0;   // pow(2, 12) / 2.; // y0 = 2048 for 12-bit ADC
+    float a = (y2 - y1) / (x2 - x1);
+    float b = y1 - a * x1; 
+    float x0 = (y0 - b) / a; // x0 = -b/a
+    if (x0 < x1 || x0 > x2) {
+        ESP_LOGW("Zero crossing", "Invalid zero crossing index: %f", x0);
+        return -1.;
+    }
+    if (x0 < 0.) {
+        ESP_LOGW("Zero crossing", "Negative zero crossing index: %f", x0);
+        return -1.;
+    }
+    return x0;
+}
+
+/**
+ * @brief Calculate the period of the tension signal
+ * @param signals Pointer to the array of signals
+ * @return The period of the tension signal in seconds, or -1 if not found
+ * @details 
+    // This function detects the period of the tension signal by looking for zero crossings
+    // It uses the raising edges or the falling edges in function of the first one detected
+ */
+float getTensionPeriod(std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* signals)
+{
+    constexpr float ERROR_VALUE = -1.0f;
+    float lastTension = signals->at(TENSION_ID)[0];
+    float firstZcIndex = -1.;
+    float secondZcIndex = -1.;
+
+    enum EdgeType {NONE, RISING, FALLING} edgeType = NONE;
+
+    for (uint16_t i = 1; i < BUFFER_SIZE; i++) {
+        float currentTension = signals->at(TENSION_ID)[i];
+        
+        // Raising edge detection
+        if (edgeType != FALLING && lastTension < 0 && currentTension >= 0) {
+            edgeType = RISING;
+            float zeroCrossingTimestamp = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
+            if (zeroCrossingTimestamp >= 0) {
+                if (firstZcIndex == -1.) {
+                    firstZcIndex = zeroCrossingTimestamp;
+                }
+                else {
+                    secondZcIndex = zeroCrossingTimestamp;
+                    break;
+                }
+            }
+        }
+
+        // Falling edge detection
+        if (edgeType != RISING && lastTension > 0 && currentTension <= 0) {
+            edgeType = FALLING;
+            float zeroCrossingTimestamp = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
+            if (zeroCrossingTimestamp >= 0) {
+                if (firstZcIndex == -1.) {
+                    firstZcIndex = zeroCrossingTimestamp;
+                }
+                else {
+                    secondZcIndex = zeroCrossingTimestamp;
+                    break;
+                }
+            }
+        }
+
+        lastTension = currentTension;
+    }
+
+    if (firstZcIndex == -1. || secondZcIndex == -1.) {
+        ESP_LOGW("Tension", "Period not found between similar edges");
+        return ERROR_VALUE;
+    }
+
+    float period = (secondZcIndex - firstZcIndex) / MAIN_FREQ / NB_SAMPLES; // in seconds
+    float freq = 1. / period;
+
+    // Robustess check on the frequency
+    if (freq > MAX_AC_FREQ || freq < MIN_AC_FREQ) {
+        ESP_LOGW("Tension", "Period outside expected range: %fHz - ZcIndexes : %f-%f", freq, firstZcIndex, secondZcIndex);
+        return ERROR_VALUE;
+    }
+
+    return period;
+}
 
 /**
  * @brief Process and log task function
@@ -90,8 +176,24 @@ void fftTask(void *pvParameters) {
 
     fft_config_t *real_fft_plan = fft_init(BUFFER_SIZE, FFT_REAL, FFT_FORWARD, NULL, NULL);
 
+    float meanPeriod = 0.;
+    int periodCount = 0;
+
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        float currentTensionPeriod = getTensionPeriod(adcBuffer.getData());
+        if (currentTensionPeriod > 0.) {
+            meanPeriod = (meanPeriod * periodCount + currentTensionPeriod) / (periodCount + 1);
+            periodCount++;
+            if (periodCount == NB_PERIODS_MEAN) {
+                ESP_LOGW("TENSION", "Mean frequency: %fHz\n", 1. / meanPeriod);
+                periodCount = 0;
+            }
+        } else {
+            ESP_LOGW("TENSION", "Invalid period: %f\n", currentTensionPeriod);
+        }
+
     
         fftChrono.startCycle();
         for (int signal = 0; signal < NB_SIGNALS; signal++) {
