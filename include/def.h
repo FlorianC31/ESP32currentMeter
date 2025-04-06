@@ -9,6 +9,7 @@
 #include <esp_timer.h>
 #include <esp_http_server.h>
 #include <esp_adc/adc_continuous.h>
+#include <esp_adc/adc_filter.h>
 #include <esp_log.h>
 #include <esp_netif.h>
 

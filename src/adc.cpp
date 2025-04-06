@@ -27,7 +27,6 @@ TaskHandle_t adc_task_handle = NULL;
 static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 {
     adc_continuous_handle_t handle = NULL;
-
     adc_continuous_handle_cfg_t adc_config;
     adc_config.max_store_buf_size = ADC_BUFFER_SIZE * 2;
     adc_config.conv_frame_size = ADC_BUFFER_SIZE;
@@ -37,7 +36,7 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
     dig_cfg.sample_freq_hz = static_cast<uint32_t>(SAMPLE_FREQ * NB_CHANNELS);
     dig_cfg.conv_mode = ADC_CONV_SINGLE_UNIT_1;
     dig_cfg.format = ADC_DIGI_OUTPUT_FORMAT_TYPE2;
-
+    
     adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX];
     dig_cfg.pattern_num = NB_CHANNELS;
     for (int i = 0; i < NB_CHANNELS; i++) {
@@ -45,14 +44,75 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
         adc_pattern[i].channel = ADC_CHANNELS[i];
         adc_pattern[i].unit = ADC_UNIT_1;
         adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-
         ESP_LOGI(TAG, "adc_pattern[%d].atten is :%u", i, adc_pattern[i].atten);
         ESP_LOGI(TAG, "adc_pattern[%d].channel is :%u", i, adc_pattern[i].channel);
         ESP_LOGI(TAG, "adc_pattern[%d].unit is :%u", i, adc_pattern[i].unit);
     }
     dig_cfg.adc_pattern = adc_pattern;
+    
+    // Configurer l'ADC
     ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
+    
+    // Constantes pour les filtres
+    constexpr adc_digi_iir_filter_coeff_t TENSION_FILTER_COEFF = ADC_DIGI_IIR_FILTER_COEFF_64;
+    //constexpr adc_digi_iir_filter_coeff_t VREF_FILTER_COEFF = ADC_DIGI_IIR_FILTER_COEFF_64;
 
+    // Configuration et activation du filtre pour la tension
+    adc_iir_filter_handle_t tension_filter_handle;
+    adc_continuous_iir_filter_config_t tension_filter_config = {
+        .unit = ADC_UNIT_1,
+        .channel = ADC_CHANNELS[TENSION_ID],
+        .coeff = TENSION_FILTER_COEFF
+    };
+    
+    // Configuration et activation du filtre pour VREF
+    /*adc_iir_filter_handle_t vref_filter_handle;
+    adc_continuous_iir_filter_config_t vref_filter_config = {
+        .unit = ADC_UNIT_1,
+        .channel = ADC_CHANNELS[VREF_ID],
+        .coeff = VREF_FILTER_COEFF
+    };*/
+    
+    // Création des filtres
+    esp_err_t ret = adc_new_continuous_iir_filter(handle, &tension_filter_config, &tension_filter_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create IIR filter for tension channel: %s", esp_err_to_name(ret));
+        return;
+    }
+    else {
+        ESP_LOGI(TAG, "IIR filter created for tension channel: %d", ADC_CHANNELS[TENSION_ID]);
+    }
+
+    /*ret = adc_new_continuous_iir_filter(handle, &vref_filter_config, &vref_filter_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create IIR filter for VREF channel: %s", esp_err_to_name(ret));
+        adc_del_continuous_iir_filter(tension_filter_handle);
+        return;
+    }
+    else {
+        ESP_LOGI(TAG, "IIR filter created for VREF channel: %d", ADC_CHANNELS[VREF_ID]);
+    }*/
+
+    // Activation des filtres
+    ret = adc_continuous_iir_filter_enable(tension_filter_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to enable tension filter: %s", esp_err_to_name(ret));
+        return;
+    }
+    else {
+        ESP_LOGI(TAG, "IIR filter enabled for tension channel %d with coeff %d", ADC_CHANNELS[TENSION_ID], TENSION_FILTER_COEFF);
+    }
+
+    /*ret = adc_continuous_iir_filter_enable(vref_filter_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to enable VREF filter: %s", esp_err_to_name(ret));
+        return;
+    }
+    else {
+        ESP_LOGI(TAG, "IIR filter enabled for VREF channel %d with coeff %d", ADC_CHANNELS[VREF_ID], VREF_FILTER_COEFF);
+    }*/
+
+    
     *out_handle = handle;
 }
 

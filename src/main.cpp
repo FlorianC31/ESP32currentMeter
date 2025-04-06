@@ -35,14 +35,15 @@ std::array<float, NB_SIGNALS> convertRawData(std::array<uint16_t, NB_CHANNELS> a
 {
     std::array<float, NB_SIGNALS> convertedData;
     for (uint8_t channelId = 0; channelId < NB_SIGNALS; channelId++) {
-        convertedData[channelId] = calibCoeffA[channelId] * (adcRawData[channelId] - adcRawData[VREF_ID]);
+        //convertedData[channelId] = calibCoeffA[channelId] * (adcRawData[channelId] - adcRawData[VREF_ID]);
+        convertedData[channelId] = adcRawData[channelId];
     }
     return convertedData;
 }
 
 float calcZeroCrossingIndex(float x1, float y1, float x2, float y2)
 {
-    float y0 = 0;   // pow(2, 12) / 2.; // y0 = 2048 for 12-bit ADC
+    float y0 = pow(2, 12) / 2.; // y0 = 2048 for 12-bit ADC
     float a = (y2 - y1) / (x2 - x1);
     float b = y1 - a * x1; 
     float x0 = (y0 - b) / a; // x0 = -b/a
@@ -72,13 +73,15 @@ float getTensionPeriod(std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* s
     float firstZcIndex = -1.;
     float secondZcIndex = -1.;
 
+    const float zero = pow(2, 12) / 2.; // y0 = 2048 for 12-bit ADC
+
     enum EdgeType {NONE, RISING, FALLING} edgeType = NONE;
 
     for (uint16_t i = 1; i < BUFFER_SIZE; i++) {
         float currentTension = signals->at(TENSION_ID)[i];
         
         // Raising edge detection
-        if (edgeType != FALLING && lastTension < 0 && currentTension >= 0) {
+        if (edgeType != FALLING && lastTension < zero && currentTension >= zero) {
             edgeType = RISING;
             float zeroCrossingTimestamp = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
             if (zeroCrossingTimestamp >= 0) {
@@ -93,7 +96,7 @@ float getTensionPeriod(std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* s
         }
 
         // Falling edge detection
-        if (edgeType != RISING && lastTension > 0 && currentTension <= 0) {
+        if (edgeType != RISING && lastTension > zero && currentTension <= zero) {
             edgeType = FALLING;
             float zeroCrossingTimestamp = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
             if (zeroCrossingTimestamp >= 0) {
@@ -121,6 +124,11 @@ float getTensionPeriod(std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* s
     // Robustess check on the frequency
     if (freq > MAX_AC_FREQ || freq < MIN_AC_FREQ) {
         ESP_LOGW("Tension", "Period outside expected range: %fHz - ZcIndexes : %f-%f", freq, firstZcIndex, secondZcIndex);
+        std::string tensionStr = "";
+        for (uint16_t i = 0; i < BUFFER_SIZE; i++) {
+            tensionStr += std::to_string(signals->at(TENSION_ID)[i]) + ";";
+        }
+        ESP_LOGW("Tension", "Tension signal: %s", tensionStr.c_str());
         return ERROR_VALUE;
     }
 
