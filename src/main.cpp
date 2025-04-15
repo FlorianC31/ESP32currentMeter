@@ -10,6 +10,13 @@
 #include "iirFilter.h"
 #include "fft.h"
 
+#include "driver/ledc.h"
+#define PWM_GPIO 40        // GPIO 40 pour la sortie
+#define PWM_FREQ_HZ 50     // Fréquence 50Hz
+#define PWM_RESOLUTION LEDC_TIMER_12_BIT  // Résolution 12-bit (0-4095)
+#define PWM_CHANNEL LEDC_CHANNEL_0        // Canal LEDC 0
+#define PWM_DUTY 2048       // 50% duty cycle (2048 sur 4095 pour 12-bit)
+
 TaskHandle_t process_task_handle = NULL;
 QueueHandle_t adcDataQueue = NULL;
 TaskHandle_t memory_handle = NULL;
@@ -136,6 +143,45 @@ float getTensionPeriod(std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* s
     return period;
 }
 
+
+void configure_pwm() {
+    // Configuration du timer
+    ledc_timer_config_t ledc_timer;
+    ledc_timer.speed_mode       = LEDC_LOW_SPEED_MODE;
+    ledc_timer.timer_num        = LEDC_TIMER_0;
+    ledc_timer.duty_resolution  = PWM_RESOLUTION;
+    ledc_timer.freq_hz          = PWM_FREQ_HZ;
+    ledc_timer.clk_cfg          = LEDC_AUTO_CLK;
+    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+    
+    // Configuration du canal
+    ledc_channel_config_t ledc_channel;
+    ledc_channel.gpio_num       = PWM_GPIO;
+    ledc_channel.speed_mode     = LEDC_LOW_SPEED_MODE;
+    ledc_channel.channel        = PWM_CHANNEL;
+    ledc_channel.intr_type      = LEDC_INTR_DISABLE;
+    ledc_channel.timer_sel      = LEDC_TIMER_0;
+    ledc_channel.duty           = PWM_DUTY;
+    ledc_channel.hpoint         = 0;
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
+}
+
+void pwm_task(void *pvParameters) {
+    // Configurer le PWM
+    configure_pwm();
+    
+    printf("Signal carré de 50Hz démarré sur GPIO40\n");
+    
+    // La tâche reste active pour maintenir le signal
+    while(1) {
+        // Vous pouvez ajouter ici un code pour modifier dynamiquement 
+        // la fréquence ou le duty cycle si nécessaire
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Délai d'1 seconde pour économiser le CPU
+    }
+}
+
+
+
 /**
  * @brief Process and log task function
  * 
@@ -256,6 +302,7 @@ extern "C" void app_main(void) {
     start_webserver();
 
     xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 4, &process_task_handle, 0);
+    xTaskCreatePinnedToCore(pwm_task, "PWM Task", 8192, NULL, 5, NULL, 1);
     xTaskCreatePinnedToCore(adc_task, "ADC Task", 8192, NULL, configMAX_PRIORITIES - 1, &adc_task_handle, 0);
     xTaskCreatePinnedToCore(fftTask, "FFT Task", 8192, NULL, 5, &fft_handle, 0);
 
