@@ -1,4 +1,4 @@
-
+#include "def.h"
 #include "wifi.h"
 
 #include "globalVar.h"

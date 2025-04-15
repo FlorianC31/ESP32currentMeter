@@ -6,7 +6,6 @@
 #include <esp_http_server.h>
 #include <esp_netif.h>
 #include "lwip/ip4_addr.h"
-#include "def.h"
 
 void wifi_init_sta(void);
 

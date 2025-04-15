@@ -20,6 +20,7 @@
 #include <vector>
 #include <string>
 #include <atomic>
+#include <cmath>
 
 #ifndef UNUSED
 #define UNUSED (void)
@@ -43,6 +44,12 @@
 #define BUFFER_SIZE     (NB_SAMPLES * NB_BUFF_CYCLES)
 #define CHRN_FREQ_LIM   MAIN_FREQ                               // hz
 #define NB_PERIODS_MEAN 10                                      // nb period for mean frequency calculation
+
+
+// IRR filter configuration
+#define FILTER_ORDER 2
+#define MAX_HARM_FILTER 10
+#define CUTOFF_FREQ (MAIN_FREQ * MAX_HARM_FILTER)
 
 
 // Measure configuration

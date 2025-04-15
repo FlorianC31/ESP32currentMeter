@@ -7,6 +7,7 @@
 #include "server.h"
 #include "circularBuffer.h"
 #include "measure.h"
+#include "iirFilter.h"
 #include "fft.h"
 
 TaskHandle_t process_task_handle = NULL;
@@ -30,12 +31,14 @@ Measure measure = Measure();
 ErrorManager errorManager = ErrorManager();
 
 std::array<float, NB_SIGNALS> calibCoeffA = {CURRENT1_COEF_A, CURRENT2_COEF_A, CURRENT3_COEF_A, CURRENT4_COEF_A, CURRENT5_COEF_A, CURRENT6_COEF_A, CURRENT7_COEF_A, CURRENT8_COEF_A, TENSION_COEF_A};
+std::array<IIRFilter, NB_CHANNELS> iirFilters;
 
 std::array<float, NB_SIGNALS> convertRawData(std::array<uint16_t, NB_CHANNELS> adcRawData)
 {
     std::array<float, NB_SIGNALS> convertedData;
+    float vref = iirFilters[VREF_ID].process(adcRawData[VREF_ID]);
     for (uint8_t channelId = 0; channelId < NB_SIGNALS; channelId++) {
-        convertedData[channelId] = calibCoeffA[channelId] * (adcRawData[channelId] - adcRawData[VREF_ID]);
+        convertedData[channelId] = calibCoeffA[channelId] * (iirFilters[channelId].process(adcRawData[channelId]) - vref);
     }
     return convertedData;
 }
