@@ -77,8 +77,14 @@ float getTensionPeriod(std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* s
 
     enum EdgeType {NONE, RISING, FALLING} edgeType = NONE;
 
+    float meanVal = 0.;
     for (uint16_t i = 1; i < BUFFER_SIZE; i++) {
-        float currentTension = signals->at(TENSION_ID)[i];
+        meanVal += signals->at(TENSION_ID)[i];
+    }
+    meanVal /= BUFFER_SIZE;
+
+    for (uint16_t i = 1; i < BUFFER_SIZE; i++) {
+        float currentTension = signals->at(TENSION_ID)[i] - meanVal;
         
         // Raising edge detection
         if (edgeType != FALLING && lastTension < 0 && currentTension >= 0) {
