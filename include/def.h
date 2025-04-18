@@ -29,8 +29,8 @@
 #define DEL_OBJ(x) if(x) {delete x;x=nullptr;}
 
 // ADC configuration
-#define NB_SAMPLES      128                                     // nb sample by main period
 #define MAIN_FREQ       50                                      // hz
+#define NB_SAMPLES      100                                     // samples number by main period
 #define MAIN_PERIOD     (1000000 / MAIN_FREQ)                   // µs
 #define NB_CURRENTS     8
 #define NB_CHANNELS     (NB_CURRENTS + 2)
@@ -39,12 +39,17 @@
 #define TIM_PERIOD      (1000000 / MAIN_FREQ / NB_SAMPLES)      // µs
 #define TENSION_ID      (NB_CURRENTS + 0)
 #define VREF_ID         (NB_CURRENTS + 1)
-#define NB_QUEUE_CYCLES 4
-#define NB_BUFF_CYCLES  2
+#define NB_BUFF_CYCLES  10
+#define NB_QUEUE_CYCLES (NB_BUFF_CYCLES + 1)
 #define BUFFER_SIZE     (NB_SAMPLES * NB_BUFF_CYCLES)
 #define CHRN_FREQ_LIM   MAIN_FREQ                               // hz
-#define NB_PERIODS_MEAN 10                                      // nb period for mean frequency calculation
+#define NB_PERIODS_MEAN 10                                      // periods number for mean frequency calculation
 
+#define TARGET_ADC_FREQ         (MAIN_FREQ * NB_SAMPLES * NB_CHANNELS)                                          // Hz
+#define F_DIGI_CON              5000000.                                                                        // Hz, see soc_caps.h line 115
+#define ADC_FREQ_DIVIDER        (F_DIGI_CON / 2. / TARGET_ADC_FREQ)                                             // float ADC frequency divider
+#define ADC_FREQ_DIVIDER_INT    50//std::round(ADC_FREQ_DIVIDER)                                                // rounded ADC frequency divider
+#define ADC_FREQ                static_cast<u_int32_t>(std::round(F_DIGI_CON / 2. / ADC_FREQ_DIVIDER_INT))      // Hz
 
 // IRR filter configuration
 #define FILTER_ORDER 2

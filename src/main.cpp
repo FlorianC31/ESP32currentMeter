@@ -22,7 +22,7 @@ QueueHandle_t adcDataQueue = NULL;
 TaskHandle_t memory_handle = NULL;
 TaskHandle_t fft_handle = NULL;
 
-int nbIgnoredPeriods = 20;
+int nbIgnoredPeriods = 200;
 
 Chrono chronoChrono("Chrono", 0.2, 12);
 Chrono adcChrono("Adc", 3, nbIgnoredPeriods);
@@ -43,9 +43,10 @@ std::array<IIRFilter, NB_CHANNELS> iirFilters;
 std::array<float, NB_SIGNALS> convertRawData(std::array<uint16_t, NB_CHANNELS> adcRawData)
 {
     std::array<float, NB_SIGNALS> convertedData;
-    float vref = iirFilters[VREF_ID].process(adcRawData[VREF_ID]);
+    //float vref = iirFilters[VREF_ID].process(adcRawData[VREF_ID]);
     for (uint8_t channelId = 0; channelId < NB_SIGNALS; channelId++) {
-        convertedData[channelId] = calibCoeffA[channelId] * (iirFilters[channelId].process(adcRawData[channelId]) - vref);
+        //convertedData[channelId] = calibCoeffA[channelId] * (iirFilters[channelId].process(adcRawData[channelId]) - vref);
+        convertedData[channelId] = calibCoeffA[channelId] * adcRawData[channelId] - adcRawData[VREF_ID];
     }
     return convertedData;
 }
@@ -89,6 +90,7 @@ float getTensionPeriod(std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* s
         meanVal += signals->at(TENSION_ID)[i];
     }
     meanVal /= BUFFER_SIZE;
+    std::string edgeTypeStr;
 
     for (uint16_t i = 1; i < BUFFER_SIZE; i++) {
         float currentTension = signals->at(TENSION_ID)[i] - meanVal;
@@ -96,7 +98,9 @@ float getTensionPeriod(std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* s
         // Raising edge detection
         if (edgeType != FALLING && lastTension < 0 && currentTension >= 0) {
             edgeType = RISING;
+            edgeTypeStr = "Rising";
             float zeroCrossingTimestamp = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
+            //ESP_LOGW("Zero Crossing index", "%f", zeroCrossingTimestamp);
             if (zeroCrossingTimestamp >= 0) {
                 if (firstZcIndex == -1.) {
                     firstZcIndex = zeroCrossingTimestamp;
@@ -111,7 +115,9 @@ float getTensionPeriod(std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* s
         // Falling edge detection
         if (edgeType != RISING && lastTension > 0 && currentTension <= 0) {
             edgeType = FALLING;
+            edgeTypeStr = "falling";
             float zeroCrossingTimestamp = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
+            //ESP_LOGW("Zero Crossing index", "%f", zeroCrossingTimestamp);
             if (zeroCrossingTimestamp >= 0) {
                 if (firstZcIndex == -1.) {
                     firstZcIndex = zeroCrossingTimestamp;
@@ -131,12 +137,13 @@ float getTensionPeriod(std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* s
         return ERROR_VALUE;
     }
 
-    float period = (secondZcIndex - firstZcIndex) / MAIN_FREQ / NB_SAMPLES; // in seconds
+    float period = (secondZcIndex - firstZcIndex) / (ADC_FREQ / NB_CHANNELS); // in seconds
     float freq = 1. / period;
+    ESP_LOGW("Tension", "Freq: %fHz - Zc %s edge indexes : %f-%f", freq, edgeTypeStr.c_str(), firstZcIndex, secondZcIndex);
 
     // Robustess check on the frequency
     if (freq > MAX_AC_FREQ || freq < MIN_AC_FREQ) {
-        ESP_LOGW("Tension", "Period outside expected range: %fHz - ZcIndexes : %f-%f", freq, firstZcIndex, secondZcIndex);
+        //ESP_LOGW("Tension", "Frequency outside expected range: %fHz - ZcIndexes : %f-%f", freq, firstZcIndex, secondZcIndex);
         return ERROR_VALUE;
     }
 
@@ -229,7 +236,7 @@ void process_and_log_task(void *pvParameters) {
 void fftTask(void *pvParameters) {
     //static const char* TAG = "FFT";
 
-    fft_config_t *real_fft_plan = fft_init(BUFFER_SIZE, FFT_REAL, FFT_FORWARD, NULL, NULL);
+    //fft_config_t *real_fft_plan = fft_init(BUFFER_SIZE, FFT_REAL, FFT_FORWARD, NULL, NULL);
 
     float meanPeriod = 0.;
     int periodCount = 0;
@@ -242,18 +249,18 @@ void fftTask(void *pvParameters) {
             meanPeriod = (meanPeriod * periodCount + currentTensionPeriod) / (periodCount + 1);
             periodCount++;
             if (periodCount == NB_PERIODS_MEAN) {
-                ESP_LOGW("TENSION", "Mean frequency: %fHz\n", 1. / meanPeriod);
+                //ESP_LOGW("TENSION", "Mean frequency: %fHz\n", 1. / meanPeriod);
                 periodCount = 0;
             }
         } else {
-            ESP_LOGW("TENSION", "Invalid period: %f\n", currentTensionPeriod);
+            //ESP_LOGW("TENSION", "Invalid period: %f\n", currentTensionPeriod);
         }
 
     
         fftChrono.startCycle();
         for (int signal = 0; signal < NB_SIGNALS; signal++) {
-            real_fft_plan->input = adcBuffer.getData()->at(signal).data();
-            fft_execute(real_fft_plan);
+            //real_fft_plan->input = adcBuffer.getData()->at(signal).data();
+            //fft_execute(real_fft_plan);
             /*if (signal == 3) {
                 for (int k = 1 ; k <=7 ; k+=2) {
                     ESP_LOGW(TAG, "Signal %d - Harmonic %d: %f+j%f", signal, k, real_fft_plan->output[2*k], real_fft_plan->output[2*k+1]);

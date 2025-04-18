@@ -6,8 +6,8 @@
 
 // Define the adc_timer_callback function
 void adc_timer_callback(void* arg) {
-    BaseType_t mustYield = pdFALSE;
-    vTaskNotifyGiveFromISR(adc_task_handle, &mustYield);
+    //BaseType_t mustYield = pdFALSE;
+    //vTaskNotifyGiveFromISR(adc_task_handle, &mustYield);
 }
 
 static const char *TAG = "ADC";
@@ -15,14 +15,14 @@ static const char *TAG = "ADC";
 TaskHandle_t adc_task_handle = NULL;
 
 
-/*static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
+static bool IRAM_ATTR s_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
 {
     BaseType_t mustYield = pdFALSE;
     //Notify that ADC continuous driver has done enough number of conversions
     vTaskNotifyGiveFromISR(adc_task_handle, &mustYield);
 
     return (mustYield == pdTRUE);
-}*/
+}
 
 static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 {
@@ -33,8 +33,9 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
     adc_config.conv_frame_size = ADC_BUFFER_SIZE;
     ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
 
+    ESP_LOGI(TAG, "ADC sample frequency is %" PRIu32 " with divider equal to %i", ADC_FREQ, static_cast<int>(ADC_FREQ_DIVIDER_INT));
     adc_continuous_config_t dig_cfg;
-    dig_cfg.sample_freq_hz = static_cast<uint32_t>(SAMPLE_FREQ * NB_CHANNELS);
+    dig_cfg.sample_freq_hz = ADC_FREQ;
     dig_cfg.conv_mode = ADC_CONV_SINGLE_UNIT_1;
     dig_cfg.format = ADC_DIGI_OUTPUT_FORMAT_TYPE2;
 
@@ -69,7 +70,7 @@ void adc_task(void *pvParameters) {
     continuous_adc_init(&handle);
 
     adc_continuous_evt_cbs_t cbs;
-    //cbs.on_conv_done = s_conv_done_cb;
+    cbs.on_conv_done = s_conv_done_cb;
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(handle, &cbs, NULL));
     ESP_ERROR_CHECK(adc_continuous_start(handle));
 
@@ -98,6 +99,14 @@ void adc_task(void *pvParameters) {
         
         ret = adc_continuous_read(handle, result, ADC_BUFFER_SIZE, &ret_num, 0);
         if (ret == ESP_OK) {
+            if (ret_num != ADC_BUFFER_SIZE) {
+                ESP_LOGE(TAG, "Read data size mismatch, expected %u, got %" PRIu32 "", ADC_BUFFER_SIZE, ret_num);
+                break;
+            }
+            else {
+                //ESP_LOGI(TAG, "Read data size match, expected %u, got %" PRIu32 "", ADC_BUFFER_SIZE, ret_num);
+            }
+
             uint8_t channelId = 0;
             //ESP_LOGI("TASK", "ret is %x, ret_num is %"PRIu32" bytes", ret, ret_num);
             for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
