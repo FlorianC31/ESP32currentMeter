@@ -1,26 +1,83 @@
 #include "server.h"
-#include "def.h"
 #include <math.h>
 #include "globalVar.h"
 #include "ntp.h"
+#include <string>
+#include <sstream>
+#include <iostream>
+
+
+static bool is_numeric(const std::string& str) {
+    double val;
+    auto result = std::from_chars(str.data(), str.data() + str.size(), val);
+    return result.ec == std::errc() && result.ptr == str.data() + str.size();
+}
 
 
 static esp_err_t get_adc_buffer_handler(httpd_req_t *req) {
+
+    ESP_LOGI("WEB_API", "get_adc_buffer_handler()");
+    std::map<std::string, int> params;
+    char query[256];
+    
+    // Extract channelId from query
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        std::stringstream ss(query);
+        std::string pair;
+    
+
+        while (std::getline(ss, pair, '&')) {
+            // Find the delimiter '=' in the pair
+            size_t pos = pair.find('=');
+            if (pos != std::string::npos) {
+                std::string key = pair.substr(0, pos);
+                std::string value = pair.substr(pos + 1);
+                if (!is_numeric(value)) {
+                    ESP_LOGE("WEB_API", "Error: invalid parameter value: %s=%s", key.c_str(), value.c_str());
+                    httpd_resp_send_500(req);
+                    return ESP_FAIL;
+                }
+                params[key] = stoi(value);
+                ESP_LOGI("WEB_API", "%s: %i", key.c_str(), params[key]);
+            }
+            
+        }
+    }
+
+    if (!params.contains("channelId")) {
+        ESP_LOGE("WEB_API", "Error: Missing 'channelId' parameter");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    if (!params.contains("filtered")) {
+        ESP_LOGE("WEB_API", "Error: Missing 'filtered' parameter");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
 
     // header Content-Type configuration
     httpd_resp_set_type(req, "application/octet-stream");
 
     // Sending binary data
     esp_err_t res = httpd_resp_send(req, 
-        reinterpret_cast<const char*>(adcBuffer.getData()->data()),
-        sizeof(float) * NB_SIGNALS * BUFFER_SIZE
+        reinterpret_cast<const char*>(signalsData[params["channelId"]]->getData(params["filtered"])->data()),
+        sizeof(float) * BUFFER_SIZE
+    );
+
+    ESP_LOGE("WEB_API", "%f,%f,%f,%f,%f", 
+        signalsData[params["channelId"]]->getData(params["filtered"])->at(0),
+        signalsData[params["channelId"]]->getData(params["filtered"])->at(1),
+        signalsData[params["channelId"]]->getData(params["filtered"])->at(2),
+        signalsData[params["channelId"]]->getData(params["filtered"])->at(3),
+        signalsData[params["channelId"]]->getData(params["filtered"])->at(4)
     );
     
     return res;
 }
 
 static esp_err_t get_adc_data_handler(httpd_req_t *req) {
-    std::string json_string = measure.getJson();
+    std::string json_string;// = measure.getJson();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json_string.c_str(), json_string.length());
     return ESP_OK;
@@ -58,7 +115,7 @@ static esp_err_t get_memory_handler(httpd_req_t *req) {
     cJSON_AddNumberToObject(json, "Free heap size (kB)", float(info.total_free_bytes) / 1000.);
     cJSON_AddNumberToObject(json, "Allocated heap size (kB)", float(info.total_allocated_bytes) / 1000.);
     cJSON_AddNumberToObject(json, "Minimum free heap size (kB)", float(info.minimum_free_bytes) / 1000.);
-    cJSON_AddNumberToObject(json, "Size of adcBuffer (kB)", float(sizeof(adcBuffer)) / 1000.);
+    //cJSON_AddNumberToObject(json, "Size of adcBuffer (kB)", float(sizeof(adcBuffer)) / 1000.);
     cJSON_AddNumberToObject(json, "Size of adcDataQueue (kB)", float(sizeof(adcDataQueue)) / 1000.);
 
     char* jsonStr = cJSON_Print(json);

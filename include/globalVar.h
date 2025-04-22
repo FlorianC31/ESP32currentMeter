@@ -6,9 +6,9 @@
 #include <string>
 
 #include "chrono.h"
-#include "circularBuffer.h"
 #include "errorManager.h"
-#include "measure.h"
+#include "elecSignal.h"
+
 
 extern TaskHandle_t adc_task_handle;
 extern TaskHandle_t process_task_handle;
@@ -19,13 +19,11 @@ extern Chrono chronoChrono;
 extern Chrono bufferMutexChrono;
 extern Chrono bufferTotalChrono;
 
-extern CircularBuffer adcBuffer;
+extern std::array<ElecSignal*, NB_CHANNELS> signalsData;
 
 extern QueueHandle_t adcDataQueue;
 
 extern ErrorManager errorManager;
-
-extern Measure mesure;
 
 extern std::string initTime;
 

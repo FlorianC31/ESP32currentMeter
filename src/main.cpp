@@ -5,10 +5,7 @@
 #include "chrono.h"
 #include "wifi.h"
 #include "server.h"
-#include "circularBuffer.h"
-#include "measure.h"
-#include "iirFilter.h"
-#include "fft.h"
+#include "elecSignal.h"
 
 #include "driver/ledc.h"
 #define PWM_GPIO 40        // GPIO 40 pour la sortie
@@ -18,258 +15,98 @@
 #define PWM_DUTY 2048       // 50% duty cycle (2048 sur 4095 pour 12-bit)
 
 TaskHandle_t process_task_handle = NULL;
-QueueHandle_t adcDataQueue = NULL;
+TaskHandle_t analysis_task_handle = NULL;
 TaskHandle_t memory_handle = NULL;
 TaskHandle_t fft_handle = NULL;
+QueueHandle_t adcDataQueue = NULL;
+std::array<ElecSignal*, NB_CHANNELS> signalsData = {nullptr};
 
-int nbIgnoredPeriods = 200;
+int nbIgnoredPeriods = 20;
 
 Chrono chronoChrono("Chrono", 0.2, 12);
-Chrono adcChrono("Adc", 3, nbIgnoredPeriods);
-Chrono fftChrono("FFT", 10, nbIgnoredPeriods / NB_BUFF_CYCLES);
+Chrono adcChrono("Adc", 3, nbIgnoredPeriods * BUFFER_SIZE);
+Chrono fftChrono("FFT", 10, nbIgnoredPeriods);
 Chrono convertChrono("Conversion", 2, nbIgnoredPeriods * NB_SAMPLES);
 Chrono processChrono("Process", 2, nbIgnoredPeriods * NB_SAMPLES);
 Chrono bufferMutexChrono("Buffer Mutex", 2);
 Chrono bufferTotalChrono("Buffer Total", 2);
 std::vector<Chrono*> chronoList = {&adcChrono, &fftChrono, &convertChrono, &processChrono};
 
-CircularBuffer adcBuffer = CircularBuffer();
-Measure measure = Measure();
-ErrorManager errorManager = ErrorManager();
+std::array<uint16_t, NB_CHANNELS> adcRawData;
+std::array<float, NB_CURRENTS> currentCalibCoeff = {CURRENT1_COEF, CURRENT2_COEF, CURRENT3_COEF, CURRENT4_COEF, CURRENT5_COEF, CURRENT6_COEF, CURRENT7_COEF, CURRENT8_COEF};
 
-std::array<float, NB_SIGNALS> calibCoeffA = {CURRENT1_COEF_A, CURRENT2_COEF_A, CURRENT3_COEF_A, CURRENT4_COEF_A, CURRENT5_COEF_A, CURRENT6_COEF_A, CURRENT7_COEF_A, CURRENT8_COEF_A, TENSION_COEF_A};
-std::array<IIRFilter, NB_CHANNELS> iirFilters;
 
-std::array<float, NB_SIGNALS> convertRawData(std::array<uint16_t, NB_CHANNELS> adcRawData)
-{
-    std::array<float, NB_SIGNALS> convertedData;
-    //float vref = iirFilters[VREF_ID].process(adcRawData[VREF_ID]);
-    for (uint8_t channelId = 0; channelId < NB_SIGNALS; channelId++) {
-        //convertedData[channelId] = calibCoeffA[channelId] * (iirFilters[channelId].process(adcRawData[channelId]) - vref);
-        convertedData[channelId] = calibCoeffA[channelId] * adcRawData[channelId] - adcRawData[VREF_ID];
-    }
-    return convertedData;
-}
-
-float calcZeroCrossingIndex(float x1, float y1, float x2, float y2)
-{
-    float y0 = 0;   // pow(2, 12) / 2.; // y0 = 2048 for 12-bit ADC
-    float a = (y2 - y1) / (x2 - x1);
-    float b = y1 - a * x1; 
-    float x0 = (y0 - b) / a; // x0 = -b/a
-    if (x0 < x1 || x0 > x2) {
-        ESP_LOGW("Zero crossing", "Invalid zero crossing index: %f", x0);
-        return -1.;
-    }
-    if (x0 < 0.) {
-        ESP_LOGW("Zero crossing", "Negative zero crossing index: %f", x0);
-        return -1.;
-    }
-    return x0;
-}
 
 /**
- * @brief Calculate the period of the tension signal
- * @param signals Pointer to the array of signals
- * @return The period of the tension signal in seconds, or -1 if not found
- * @details 
-    // This function detects the period of the tension signal by looking for zero crossings
-    // It uses the raising edges or the falling edges in function of the first one detected
+ * * @brief Initialize the signals
  */
-float getTensionPeriod(std::array<std::array<float, BUFFER_SIZE>, NB_SIGNALS>* signals)
+void initSignals()
 {
-    constexpr float ERROR_VALUE = -1.0f;
-    float lastTension = signals->at(TENSION_ID)[0];
-    float firstZcIndex = -1.;
-    float secondZcIndex = -1.;
+    fft_config_t *fftManager = (fft_config_t *)malloc(sizeof(fft_config_t));
 
-    enum EdgeType {NONE, RISING, FALLING} edgeType = NONE;
+    signalsData[VREF_ID] = new ElecSignal("Vref", fftManager);
+    signalsData[TENSION_ID] = new ElecSignal("Tension", fftManager, TENSION_COEF, signalsData[VREF_ID]);
 
-    float meanVal = 0.;
-    for (uint16_t i = 1; i < BUFFER_SIZE; i++) {
-        meanVal += signals->at(TENSION_ID)[i];
-    }
-    meanVal /= BUFFER_SIZE;
-    std::string edgeTypeStr;
-
-    for (uint16_t i = 1; i < BUFFER_SIZE; i++) {
-        float currentTension = signals->at(TENSION_ID)[i] - meanVal;
-        
-        // Raising edge detection
-        if (edgeType != FALLING && lastTension < 0 && currentTension >= 0) {
-            edgeType = RISING;
-            edgeTypeStr = "Rising";
-            float zeroCrossingTimestamp = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
-            //ESP_LOGW("Zero Crossing index", "%f", zeroCrossingTimestamp);
-            if (zeroCrossingTimestamp >= 0) {
-                if (firstZcIndex == -1.) {
-                    firstZcIndex = zeroCrossingTimestamp;
-                }
-                else {
-                    secondZcIndex = zeroCrossingTimestamp;
-                    break;
-                }
-            }
-        }
-
-        // Falling edge detection
-        if (edgeType != RISING && lastTension > 0 && currentTension <= 0) {
-            edgeType = FALLING;
-            edgeTypeStr = "falling";
-            float zeroCrossingTimestamp = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
-            //ESP_LOGW("Zero Crossing index", "%f", zeroCrossingTimestamp);
-            if (zeroCrossingTimestamp >= 0) {
-                if (firstZcIndex == -1.) {
-                    firstZcIndex = zeroCrossingTimestamp;
-                }
-                else {
-                    secondZcIndex = zeroCrossingTimestamp;
-                    break;
-                }
-            }
-        }
-
-        lastTension = currentTension;
-    }
-
-    if (firstZcIndex == -1. || secondZcIndex == -1.) {
-        ESP_LOGW("Tension", "Period not found between similar edges");
-        return ERROR_VALUE;
-    }
-
-    float period = (secondZcIndex - firstZcIndex) / (ADC_FREQ / NB_CHANNELS); // in seconds
-    float freq = 1. / period;
-    ESP_LOGW("Tension", "Freq: %fHz - Zc %s edge indexes : %f-%f", freq, edgeTypeStr.c_str(), firstZcIndex, secondZcIndex);
-
-    // Robustess check on the frequency
-    if (freq > MAX_AC_FREQ || freq < MIN_AC_FREQ) {
-        //ESP_LOGW("Tension", "Frequency outside expected range: %fHz - ZcIndexes : %f-%f", freq, firstZcIndex, secondZcIndex);
-        return ERROR_VALUE;
-    }
-
-    return period;
-}
-
-
-void configure_pwm() {
-    // Configuration du timer
-    ledc_timer_config_t ledc_timer;
-    ledc_timer.speed_mode       = LEDC_LOW_SPEED_MODE;
-    ledc_timer.timer_num        = LEDC_TIMER_0;
-    ledc_timer.duty_resolution  = PWM_RESOLUTION;
-    ledc_timer.freq_hz          = PWM_FREQ_HZ;
-    ledc_timer.clk_cfg          = LEDC_AUTO_CLK;
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
-    
-    // Configuration du canal
-    ledc_channel_config_t ledc_channel;
-    ledc_channel.gpio_num       = PWM_GPIO;
-    ledc_channel.speed_mode     = LEDC_LOW_SPEED_MODE;
-    ledc_channel.channel        = PWM_CHANNEL;
-    ledc_channel.intr_type      = LEDC_INTR_DISABLE;
-    ledc_channel.timer_sel      = LEDC_TIMER_0;
-    ledc_channel.duty           = PWM_DUTY;
-    ledc_channel.hpoint         = 0;
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
-}
-
-void pwm_task(void *pvParameters) {
-    // Configurer le PWM
-    configure_pwm();
-    
-    printf("Signal carré de 50Hz démarré sur GPIO40\n");
-    
-    // La tâche reste active pour maintenir le signal
-    while(1) {
-        // Vous pouvez ajouter ici un code pour modifier dynamiquement 
-        // la fréquence ou le duty cycle si nécessaire
-        vTaskDelay(pdMS_TO_TICKS(1000)); // Délai d'1 seconde pour économiser le CPU
+    for (uint8_t i = 0; i < NB_CURRENTS; i++) {
+        std::string signalName = "Current" + std::to_string(i + 1);
+        signalsData[i + 1] = new ElecSignal(signalName, fftManager, currentCalibCoeff[i], signalsData[VREF_ID], signalsData[TENSION_ID]);
     }
 }
+
+
 
 
 
 /**
- * @brief Process and log task function
+ * @brief Process task function
  * 
- * This task processes the ADC data and logs the results.
+ * This task processes the ADC data.
  */
-void process_and_log_task(void *pvParameters) {
+void process(void *pvParameters) {
 
     static const char* TAG = "PROCESS_TASK";
 
-    ESP_LOGI(TAG, "Process and log task starting");
-
-    std::array<uint16_t, NB_CHANNELS> adcRawData;
-    std::array<float, NB_SIGNALS> adcConvertedData;
-
-    //fft_config_t *real_fft_plan = fft_init(BUFFER_SIZE, FFT_REAL, FFT_FORWARD, NULL, NULL);
+    ESP_LOGI(TAG, "Process task starting");
     
     while (1) {
         if (xQueueReceive(adcDataQueue, &adcRawData, 1) == pdPASS) {
-            processChrono.startCycle();
-            convertChrono.startCycle();
-            adcConvertedData = convertRawData(adcRawData);
-            convertChrono.endCycle();
-            if (adcBuffer.addData(adcConvertedData)) {
-                xTaskNotifyGive(fft_handle);
+            for (uint8_t i = 0; i < NB_CHANNELS; i++) {
+                //ESP_LOGI(TAG, "addRawData(adcRawData[%i])", i);
+                signalsData[i]->addRawData(adcRawData[i]);
+            }   
+            processChrono.endCycle();
+            if (signalsData[VREF_ID]->isReadyForProcessing()) {
+                xTaskNotify(analysis_task_handle, 0x01, eSetBits);
             }
-
-            /*fftChrono.startCycle();
-            real_fft_plan->input = adcConvertedData.data();
-            fftChrono.endCycle();
-            fft_execute(real_fft_plan);
-
-            ESP_LOGW(TAG, "DC component : %f\n", real_fft_plan->output[0]);  // DC is at [0]
-            for (int k = 1 ; k < real_fft_plan->size / 2 ; k++) {
-                ESP_LOGW(TAG, "%d-th freq : %f+j%f\n", k, real_fft_plan->output[2*k], real_fft_plan->output[2*k+1]);
-            }
-            ESP_LOGW(TAG, "Middle component : %f\n", real_fft_plan->output[1]);  // N/2 is real and stored at [1]*/
-
-            //measure.cal(adcData);   
-            processChrono.endCycle();     
         }
     }
 }
 
 
-void fftTask(void *pvParameters) {
-    //static const char* TAG = "FFT";
+/**
+ * @brief Process task function
+ * 
+ * This task processes the ADC data.
+ */
+void dataAnalysis(void *pvParameters) {
 
-    //fft_config_t *real_fft_plan = fft_init(BUFFER_SIZE, FFT_REAL, FFT_FORWARD, NULL, NULL);
+    static const char* TAG = "ANALYSIS_TASK";
+    ESP_LOGI(TAG, "Analysis task starting");
 
-    float meanPeriod = 0.;
-    int periodCount = 0;
-
-    while (1) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-        float currentTensionPeriod = getTensionPeriod(adcBuffer.getData());
-        if (currentTensionPeriod > 0.) {
-            meanPeriod = (meanPeriod * periodCount + currentTensionPeriod) / (periodCount + 1);
-            periodCount++;
-            if (periodCount == NB_PERIODS_MEAN) {
-                //ESP_LOGW("TENSION", "Mean frequency: %fHz\n", 1. / meanPeriod);
-                periodCount = 0;
-            }
-        } else {
-            //ESP_LOGW("TENSION", "Invalid period: %f\n", currentTensionPeriod);
-        }
-
+    uint32_t ulNotificationValue;
     
-        fftChrono.startCycle();
-        for (int signal = 0; signal < NB_SIGNALS; signal++) {
-            //real_fft_plan->input = adcBuffer.getData()->at(signal).data();
-            //fft_execute(real_fft_plan);
-            /*if (signal == 3) {
-                for (int k = 1 ; k <=7 ; k+=2) {
-                    ESP_LOGW(TAG, "Signal %d - Harmonic %d: %f+j%f", signal, k, real_fft_plan->output[2*k], real_fft_plan->output[2*k+1]);
+    while (1) {
+        if(xTaskNotifyWait(0, 0xFFFFFFFF, &ulNotificationValue, portMAX_DELAY) == pdTRUE) {
+            if((ulNotificationValue & 0x01) != 0) {
+                signalsData[TENSION_ID]->runAnalysis(true);
+                for (uint8_t i = 1; i <= NB_CURRENTS; i++) {
+                    signalsData[i]->runAnalysis();
                 }
-            }*/
+            }
         }
-        fftChrono.endCycle();
     }
 }
+
 
 
 void memory_task(void *pvParameters) {
@@ -300,19 +137,18 @@ extern "C" void app_main(void) {
     //adc_init();
     wifi_init_sta();
 
-    adcDataQueue = xQueueCreate(NB_SAMPLES * NB_QUEUE_CYCLES, sizeof(std::array<uint16_t, NB_CHANNELS>));
+    adcDataQueue = xQueueCreate(QUEUE_SIZE, sizeof(std::array<uint16_t, NB_CHANNELS>));
     if (adcDataQueue == NULL) {
         ESP_LOGE(TAG, "Failed to create ADC data queue");
         vTaskDelete(NULL);
     }
 
     start_webserver();
+    initSignals();
 
-    xTaskCreatePinnedToCore(process_and_log_task, "Process and Log Task", 8192, NULL, 4, &process_task_handle, 0);
-    xTaskCreatePinnedToCore(pwm_task, "PWM Task", 8192, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(process, "Process Task", 8192, NULL, 4, &process_task_handle, 0);
     xTaskCreatePinnedToCore(adc_task, "ADC Task", 8192, NULL, configMAX_PRIORITIES - 1, &adc_task_handle, 0);
-    xTaskCreatePinnedToCore(fftTask, "FFT Task", 8192, NULL, 5, &fft_handle, 0);
-
+    xTaskCreatePinnedToCore(dataAnalysis, "Data Analysis Task", 8192, NULL, configMAX_PRIORITIES - 1, &analysis_task_handle, 1);
     //xTaskCreatePinnedToCore(memory_task, "MEMORY Task", 8192, NULL, 5, &memory_handle, 1);
 
 

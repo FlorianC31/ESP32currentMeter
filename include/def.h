@@ -18,6 +18,7 @@
 #include <array>
 #include <span>
 #include <vector>
+#include <map>
 #include <string>
 #include <atomic>
 #include <cmath>
@@ -37,11 +38,10 @@
 #define NB_SIGNALS      (NB_CHANNELS - 1)
 #define SAMPLE_FREQ     (NB_SAMPLES * MAIN_FREQ)                // Hz
 #define TIM_PERIOD      (1000000 / MAIN_FREQ / NB_SAMPLES)      // µs
-#define TENSION_ID      (NB_CURRENTS + 0)
-#define VREF_ID         (NB_CURRENTS + 1)
-#define NB_BUFF_CYCLES  10
-#define NB_QUEUE_CYCLES (NB_BUFF_CYCLES + 1)
-#define BUFFER_SIZE     (NB_SAMPLES * NB_BUFF_CYCLES)
+#define TENSION_ID      0                                       // first channel
+#define VREF_ID         NB_SIGNALS  // Vref signal ID           // last channel
+#define BUFFER_SIZE     1024
+#define QUEUE_SIZE      (NB_SAMPLES * 2)                        // 2 periods of samples
 #define CHRN_FREQ_LIM   MAIN_FREQ                               // hz
 #define NB_PERIODS_MEAN 10                                      // periods number for mean frequency calculation
 
@@ -75,24 +75,15 @@
 #define MAX_AC_FREQ   55.          // Hz
 
 // Calibration coeff
-#define CURRENT1_COEF_A     0.0279666256231008
-#define CURRENT2_COEF_A     0.011393810439041
-#define CURRENT3_COEF_A     0.011393810439041
-#define CURRENT4_COEF_A     0.0165728151840597
-#define CURRENT5_COEF_A     0.0379793681301368
-#define CURRENT6_COEF_A     0.1
-#define CURRENT7_COEF_A     0.1
-#define CURRENT8_COEF_A     0.1
-#define TENSION_COEF_A      0.178719296343853
+#define CURRENT1_COEF       0.0279666256231008
+#define CURRENT2_COEF       0.011393810439041
+#define CURRENT3_COEF       0.011393810439041
+#define CURRENT4_COEF       0.0165728151840597
+#define CURRENT5_COEF       0.0379793681301368
+#define CURRENT6_COEF       0.1
+#define CURRENT7_COEF       0.1
+#define CURRENT8_COEF       0.1
+#define TENSION_COEF        0.178719296343853
 
-#define CURRENT1_COEF_B     0.
-#define CURRENT2_COEF_B     0.
-#define CURRENT3_COEF_B     0.
-#define CURRENT4_COEF_B     0.
-#define CURRENT5_COEF_B     0.
-#define CURRENT6_COEF_B     0.
-#define CURRENT7_COEF_B     0.
-#define CURRENT8_COEF_B     0.
-#define TENSION_COEF_B      0.
 
 #endif      // __DEF_H

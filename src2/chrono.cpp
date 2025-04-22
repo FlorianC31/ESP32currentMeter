@@ -1,8 +1,6 @@
-#include "chrono.h"
 #include "def.h"
+#include "chrono.h"
 
-#include <esp_log.h>
-#include <esp_timer.h>
 
 
 /**
