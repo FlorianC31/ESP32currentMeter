@@ -41,20 +41,19 @@
 #define TENSION_ID      0                                       // first channel
 #define VREF_ID         NB_SIGNALS  // Vref signal ID           // last channel
 #define BUFFER_SIZE     1024
+#define NB_FULL_PERIODS int(BUFFER_SIZE/NB_SAMPLES)             // number of full periods in the buffer
 #define QUEUE_SIZE      (NB_SAMPLES * 2)                        // 2 periods of samples
 #define CHRN_FREQ_LIM   MAIN_FREQ                               // hz
-#define NB_PERIODS_MEAN 10                                      // periods number for mean frequency calculation
 
 #define TARGET_ADC_FREQ         (MAIN_FREQ * NB_SAMPLES * NB_CHANNELS)                                          // Hz
 #define F_DIGI_CON              5000000.                                                                        // Hz, see soc_caps.h line 115
 #define ADC_FREQ_DIVIDER        (F_DIGI_CON / 2. / TARGET_ADC_FREQ)                                             // float ADC frequency divider
-#define ADC_FREQ_DIVIDER_INT    50//std::round(ADC_FREQ_DIVIDER)                                                // rounded ADC frequency divider
+#define ADC_FREQ_DIVIDER_INT    std::round(ADC_FREQ_DIVIDER)                                                    // rounded ADC frequency divider
 #define ADC_FREQ                static_cast<u_int32_t>(std::round(F_DIGI_CON / 2. / ADC_FREQ_DIVIDER_INT))      // Hz
 
 // IRR filter configuration
-#define FILTER_ORDER 2
-#define MAX_HARM_FILTER 10
-#define CUTOFF_FREQ (MAIN_FREQ * MAX_HARM_FILTER)
+#define FILTER_ORDER    2
+#define CUTOFF_FREQ     250             // Hz
 
 
 // Measure configuration

@@ -151,66 +151,70 @@ float ElecSignal::calcFrequency()
 {
     constexpr float ERROR_VALUE = -1.0f;
     float lastTension = m_filteredDataBuffer.getData()->at(0);
-    float firstZcIndex = -1.;
-    float secondZcIndex = -1.;
 
-    enum EdgeType {NONE, RISING, FALLING} edgeType = NONE;
+    std::vector<float> fallingEgdeIndexes;
+    std::vector<float> risingEgdeIndexes;
 
 
-    std::string edgeTypeStr;
+    //ESP_LOGI("Tension", "NB_FULL_PERIODS=%i", NB_FULL_PERIODS);
+
+    fallingEgdeIndexes.reserve(NB_FULL_PERIODS);
+    risingEgdeIndexes.reserve(NB_FULL_PERIODS);
+
 
     for (uint16_t i = 1; i < BUFFER_SIZE; i++) {
         float currentTension = m_filteredDataBuffer.getData()->at(i);
         
-        // Raising edge detection
-        if (edgeType != FALLING && lastTension < 0 && currentTension >= 0) {
-            edgeType = RISING;
-            edgeTypeStr = "Rising";
-            float zeroCrossingTimestamp = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
-            //ESP_LOGW("Zero Crossing index", "%f", zeroCrossingTimestamp);
-            if (zeroCrossingTimestamp >= 0) {
-                if (firstZcIndex == -1.) {
-                    firstZcIndex = zeroCrossingTimestamp;
-                }
-                else {
-                    secondZcIndex = zeroCrossingTimestamp;
-                    break;
-                }
-            }
+        // Rising edge detection
+        if (lastTension < 0 && currentTension >= 0) {
+            float zeroCrossingIndex = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
+            risingEgdeIndexes.push_back(zeroCrossingIndex);
         }
 
         // Falling edge detection
-        if (edgeType != RISING && lastTension > 0 && currentTension <= 0) {
-            edgeType = FALLING;
-            edgeTypeStr = "falling";
-            float zeroCrossingTimestamp = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
-            //ESP_LOGW("Zero Crossing index", "%f", zeroCrossingTimestamp);
-            if (zeroCrossingTimestamp >= 0) {
-                if (firstZcIndex == -1.) {
-                    firstZcIndex = zeroCrossingTimestamp;
-                }
-                else {
-                    secondZcIndex = zeroCrossingTimestamp;
-                    break;
-                }
-            }
+        if (lastTension > 0 && currentTension <= 0) {
+            float zeroCrossingIndex = calcZeroCrossingIndex(i - 1, lastTension, i, currentTension);
+            fallingEgdeIndexes.push_back(zeroCrossingIndex);
+        }
+
+        if (risingEgdeIndexes.size() >= NB_FULL_PERIODS && fallingEgdeIndexes.size() >= NB_FULL_PERIODS) {
+            break;
         }
 
         lastTension = currentTension;
     }
 
-    if (firstZcIndex == -1. || secondZcIndex == -1.) {
-        ESP_LOGW("Tension", "Period not found between similar edges");
+    if (risingEgdeIndexes.size() < NB_FULL_PERIODS || fallingEgdeIndexes.size() < NB_FULL_PERIODS) {
+        ESP_LOGE("Tension", "Error on zero crossing detection: %d-%d", risingEgdeIndexes.size(), fallingEgdeIndexes.size());
         return ERROR_VALUE;
     }
 
-    float period = (secondZcIndex - firstZcIndex) / (ADC_FREQ / NB_CHANNELS); // in seconds
-    float freq = 1. / period;
-    ESP_LOGW("Tension", "Freq: %fHz - Zc %s edge indexes : %f-%f", freq, edgeTypeStr.c_str(), firstZcIndex, secondZcIndex);
+    std::string risingEgdeIndexesStr = "";
+    for (float index : risingEgdeIndexes) {
+        risingEgdeIndexesStr += std::to_string(index) + ",";
+    }
+    //ESP_LOGI("Tension", "Rising edge indexes: %s", risingEgdeIndexesStr.c_str());
 
-    // Robustess check on the frequency
+    std::string fallingEgdeIndexesStr = "";
+    for (float index : fallingEgdeIndexes) {
+        fallingEgdeIndexesStr += std::to_string(index) + ",";
+    }
+    //ESP_LOGI("Tension", "Falling edge indexes: %s", fallingEgdeIndexesStr.c_str());
+
+    // Calculate the average of the first and last zero crossing indexes
+    float risingIndexesDelta = (risingEgdeIndexes[NB_FULL_PERIODS - 1] - risingEgdeIndexes[0]) / (NB_FULL_PERIODS - 1);
+    float fallingIndexesDelta = (fallingEgdeIndexes[NB_FULL_PERIODS - 1] - fallingEgdeIndexes[0]) / (NB_FULL_PERIODS - 1);
+    float meanIndexesDelta = (risingIndexesDelta + fallingIndexesDelta) / 2.;
+
+    //ESP_LOGI("Tension", "Indexes delta - rising: %f - falling: %f - mean: %f", risingIndexesDelta, fallingIndexesDelta, meanIndexesDelta);
+
+    float period = meanIndexesDelta / (ADC_FREQ / NB_CHANNELS); // in seconds
+    float freq = 1. / period;   // in Hz
+    //ESP_LOGI("Tension", "Period: %fs - Freq: %fHz", period, freq);
+
+    // Robustness check on the frequency
     if (freq > MAX_AC_FREQ || freq < MIN_AC_FREQ) {
-        //ESP_LOGW("Tension", "Frequency outside expected range: %fHz - ZcIndexes : %f-%f", freq, firstZcIndex, secondZcIndex);
+        ESP_LOGE("Tension", "Error: Frequency outside expected range: %fHz", freq);
         return ERROR_VALUE;
     }
 
