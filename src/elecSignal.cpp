@@ -2,8 +2,9 @@
 
 
 
-ElecSignal::ElecSignal(std::string name, fft_config_t* fftManager, float calibCoeff, ElecSignal* refSignal, ElecSignal* tensionSignal) :
+ElecSignal::ElecSignal(std::string name, bool isTension, fft_config_t* fftManager, float calibCoeff, ElecSignal* refSignal, ElecSignal* tensionSignal) :
     m_name(name),
+    m_isTension(isTension),
     m_calibCoeff(calibCoeff),
     m_fftManager(fftManager),
     m_refSignal(refSignal),
@@ -61,14 +62,14 @@ void ElecSignal::addRawData(float data)
 }
 
 
-void ElecSignal::runAnalysis(bool isTension)
+void ElecSignal::runAnalysis()
 {
 
     /*m_fftManager->input = m_rawDataBuffer.getData()->data();
     fft_execute(m_fftManager);*/
 
     // Process the data in the buffer if it's ready
-    if (isTension) {
+    if (m_isTension) {
         /*ESP_LOGE("ElecSignal", "%f,%f,%f,%f,%f,[...],%f",
             m_filteredDataBuffer.getData()->at(0),
             m_filteredDataBuffer.getData()->at(1),
@@ -78,7 +79,10 @@ void ElecSignal::runAnalysis(bool isTension)
             m_filteredDataBuffer.getData()->at(BUFFER_SIZE - 1)
         );*/
         calcFrequency();
+        calcRmsValue();
     }
+
+    
     
 }
 
@@ -147,9 +151,8 @@ float ElecSignal::calcZeroCrossingIndex(float x1, float y1, float x2, float y2, 
 }
 
 
-float ElecSignal::calcFrequency()
+void ElecSignal::calcFrequency()
 {
-    constexpr float ERROR_VALUE = -1.0f;
     float lastTension = m_filteredDataBuffer.getData()->at(0);
 
     std::vector<float> fallingEgdeIndexes;
@@ -186,7 +189,6 @@ float ElecSignal::calcFrequency()
 
     if (risingEgdeIndexes.size() < NB_FULL_PERIODS || fallingEgdeIndexes.size() < NB_FULL_PERIODS) {
         ESP_LOGE("Tension", "Error on zero crossing detection: %d-%d", risingEgdeIndexes.size(), fallingEgdeIndexes.size());
-        return ERROR_VALUE;
     }
 
     std::string risingEgdeIndexesStr = "";
@@ -209,14 +211,56 @@ float ElecSignal::calcFrequency()
     //ESP_LOGI("Tension", "Indexes delta - rising: %f - falling: %f - mean: %f", risingIndexesDelta, fallingIndexesDelta, meanIndexesDelta);
 
     float period = meanIndexesDelta / (ADC_FREQ / NB_CHANNELS); // in seconds
-    float freq = 1. / period;   // in Hz
-    //ESP_LOGI("Tension", "Period: %fs - Freq: %fHz", period, freq);
+    m_frequency = 1. / period;   // in Hz
+    //ESP_LOGI("Tension", "Period: %fs - Freq: %fHz", period, m_frequency);
+
+    m_firstRisingZeroCrossingIndex = risingEgdeIndexes[0];
+    m_lastRisingZeroCrossingIndex = risingEgdeIndexes[NB_FULL_PERIODS - 1];
 
     // Robustness check on the frequency
-    if (freq > MAX_AC_FREQ || freq < MIN_AC_FREQ) {
-        ESP_LOGE("Tension", "Error: Frequency outside expected range: %fHz", freq);
-        return ERROR_VALUE;
+    if (m_frequency > MAX_AC_FREQ || m_frequency < MIN_AC_FREQ) {
+        ESP_LOGE("Tension", "Error: Frequency outside expected range: %fHz", m_frequency);
+    }
+}
+
+
+void ElecSignal::calcRmsValue()
+{
+    // Calculate the RMS value of the signal using: {\displaystyle U={\sqrt {{\frac {1}{T}}\cdot \int _{t_{0}}^{t_{0}+T}u^{2}(t)\cdot \mathrm {d} t}}}
+
+
+    m_rmsValue = 0.;
+    m_maxValue = 0.;
+
+    int firstIntIndex = static_cast<int>(m_firstRisingZeroCrossingIndex) + 1;
+    int lastIntIndex = static_cast<int>(m_lastRisingZeroCrossingIndex);
+    float samplingPeriodTime = 1.e6 / SAMPLE_FREQ; // in µs
+
+    ESP_LOGI("RMS", "firstIntIndex: %i - lastIntIndex: %i - samplingPeriodTime: %fµs", firstIntIndex, lastIntIndex, samplingPeriodTime);
+
+    // From first rising zero crossing to first integer index, the value is equal to 0, so the RMS calculation starts from the first integer index
+    for (u_int16_t i = firstIntIndex; i < lastIntIndex; i++) {
+        m_rmsValue += pow(m_filteredDataBuffer.getData()->at(i), 2) * samplingPeriodTime;
+        if (abs(m_filteredDataBuffer.getData()->at(i)) > m_maxValue) {
+            m_maxValue = abs(m_filteredDataBuffer.getData()->at(i));
+        }
     }
 
-    return period;
+    // Then, to complete the full period, the value of the last integer index is used with the remaining period time
+    float remainingPeriodTime = (m_lastRisingZeroCrossingIndex - static_cast<float>(lastIntIndex)) * samplingPeriodTime; // in µs
+    if (remainingPeriodTime > 0.) {
+        m_rmsValue += pow(m_filteredDataBuffer.getData()->at(lastIntIndex), 2) * remainingPeriodTime;
+    }
+
+    float totalTime = (m_lastRisingZeroCrossingIndex - m_firstRisingZeroCrossingIndex) / SAMPLE_FREQ * 1e6; // in µs
+    float beginingPeriodTime = (static_cast<float>(firstIntIndex) - m_firstRisingZeroCrossingIndex) * samplingPeriodTime; // in µs
+    float checkTotalTime = beginingPeriodTime + (lastIntIndex - firstIntIndex) * samplingPeriodTime + remainingPeriodTime; // in µs
+    ESP_LOGI("RMS", "remainingPeriodTime: %fµs - totalTime: %fµs - checkTotalTime: %fµs", remainingPeriodTime, totalTime, checkTotalTime);
+
+    m_rmsValue = sqrt(m_rmsValue / totalTime);
+
+    std::string unit = m_isTension ? "V" : "A";
+    float theroticalRmsValue = m_maxValue / sqrt(2.);
+    ESP_LOGI("RMS", "Max = %f%s - TheroriqueRMS = %f%s", m_maxValue, unit.c_str(), theroticalRmsValue, unit.c_str());
+    ESP_LOGI("RMS", "RMS = %f%s", m_rmsValue, unit.c_str());
 }

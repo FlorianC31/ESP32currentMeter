@@ -44,12 +44,12 @@ void initSignals()
 {
     fft_config_t *fftManager = (fft_config_t *)malloc(sizeof(fft_config_t));
 
-    signalsData[VREF_ID] = new ElecSignal("Vref", fftManager);
-    signalsData[TENSION_ID] = new ElecSignal("Tension", fftManager, TENSION_COEF, signalsData[VREF_ID]);
+    signalsData[VREF_ID] = new ElecSignal("Vref", false, fftManager);
+    signalsData[TENSION_ID] = new ElecSignal("Tension", true, fftManager, TENSION_COEF, signalsData[VREF_ID]);
 
     for (uint8_t i = 0; i < NB_CURRENTS; i++) {
         std::string signalName = "Current" + std::to_string(i + 1);
-        signalsData[i + 1] = new ElecSignal(signalName, fftManager, currentCalibCoeff[i], signalsData[VREF_ID], signalsData[TENSION_ID]);
+        signalsData[i + 1] = new ElecSignal(signalName, false, fftManager, currentCalibCoeff[i], signalsData[VREF_ID], signalsData[TENSION_ID]);
     }
 }
 
@@ -98,7 +98,7 @@ void dataAnalysis(void *pvParameters) {
     while (1) {
         if(xTaskNotifyWait(0, 0xFFFFFFFF, &ulNotificationValue, portMAX_DELAY) == pdTRUE) {
             if((ulNotificationValue & 0x01) != 0) {
-                signalsData[TENSION_ID]->runAnalysis(true);
+                signalsData[TENSION_ID]->runAnalysis();
                 for (uint8_t i = 1; i <= NB_CURRENTS; i++) {
                     signalsData[i]->runAnalysis();
                 }
