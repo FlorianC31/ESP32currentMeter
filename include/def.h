@@ -57,8 +57,8 @@
 #define CUTOFF_FREQ     250             // Hz
 
 
-// Measure configuration
-#define MEASURE_PACKET_PERIOD   (5 * 60)             // 5 minutes in seconds
+// Chrono configuration
+#define NB_IGNORED_PERIODS 20
 
 // Network configuration
 #define WIFI_SSID "Livebox-Florelie"

@@ -17,20 +17,19 @@
 TaskHandle_t process_task_handle = NULL;
 TaskHandle_t analysis_task_handle = NULL;
 TaskHandle_t memory_handle = NULL;
-TaskHandle_t fft_handle = NULL;
 QueueHandle_t adcDataQueue = NULL;
 std::array<ElecSignal*, NB_SIGNALS> signalsData = {nullptr};
 
 int nbIgnoredPeriods = 20;
 
-Chrono chronoChrono("Chrono", 0.2, 12);
-Chrono adcChrono("Adc", 3, nbIgnoredPeriods * BUFFER_SIZE);
-Chrono fftChrono("FFT", 10, nbIgnoredPeriods);
-Chrono convertChrono("Conversion", 2, nbIgnoredPeriods * NB_SAMPLES);
-Chrono processChrono("Process", 2, nbIgnoredPeriods * NB_SAMPLES);
+Chrono chronoChrono("Chrono");
+Chrono adcChrono("Adc");
+Chrono fftChrono("FFT");
+Chrono bufferingChrono("Buffering", MAIN_FREQ * NB_SAMPLES);
+Chrono processChrono("Process");
 Chrono bufferMutexChrono("Buffer Mutex", 2);
 Chrono bufferTotalChrono("Buffer Total", 2);
-std::vector<Chrono*> chronoList = {&adcChrono, &fftChrono, &convertChrono, &processChrono};
+std::vector<Chrono*> chronoList = {&adcChrono, &fftChrono, &bufferingChrono, &processChrono};
 
 std::array<uint16_t, NB_CHANNELS> adcRawData;
 std::array<float, NB_CURRENTS> currentCalibCoeff = {CURRENT1_COEF, CURRENT2_COEF, CURRENT3_COEF, CURRENT4_COEF, CURRENT5_COEF, CURRENT6_COEF, CURRENT7_COEF, CURRENT8_COEF};
@@ -69,11 +68,12 @@ void process(void *pvParameters) {
     
     while (1) {
         if (xQueueReceive(adcDataQueue, &adcRawData, 1) == pdPASS) {
+            bufferingChrono.startCycle();
             for (uint8_t i = 0; i < NB_SIGNALS; i++) {
                 //ESP_LOGI(TAG, "addRawData(adcRawData[%i])", i);
                 signalsData[i]->addRawData(adcRawData[i] - adcRawData[VREF_ID]);
             }   
-            processChrono.endCycle();
+            bufferingChrono.endCycle();
             if (signalsData[LAST_CURRENT_ID]->isReadyForProcessing()) {
                 xTaskNotify(analysis_task_handle, 0x01, eSetBits);
             }
@@ -97,10 +97,12 @@ void dataAnalysis(void *pvParameters) {
     while (1) {
         if(xTaskNotifyWait(0, 0xFFFFFFFF, &ulNotificationValue, portMAX_DELAY) == pdTRUE) {
             if((ulNotificationValue & 0x01) != 0) {
+                processChrono.startCycle();
                 signalsData[TENSION_ID]->runAnalysis();
                 for (uint8_t i = 1; i <= NB_CURRENTS; i++) {
                     signalsData[i]->runAnalysis();
                 }
+                processChrono.endCycle();
             }
         }
     }

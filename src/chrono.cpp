@@ -13,13 +13,14 @@
  * @param printFreq The frequency (number of itterations) at which to print the timing statistics.
  * @param debug if true, the chrono will be printed at the end if each cycle
  */
-Chrono::Chrono(std::string name, float limitCpu, int nbIgnored, int printFreq) :
+Chrono::Chrono(std::string name, float theoricalFreq) :
     m_name(name),
-    m_limitCpu(limitCpu),
-    m_nbIgnored(nbIgnored),
-    m_printFreq(printFreq),
+    m_theoricalFreq(theoricalFreq),
+    m_nbIgnored(0),
+    m_iter(0),
     m_startTime(0),
     m_lastStartTime(0),
+    m_lastEndTime(0),
     m_globalStartTime(0)
 {
     init();
@@ -41,6 +42,7 @@ void Chrono::init()
     m_cpuUsage.init(m_limitCpu);
     int limitDuration = m_limitCpu * 10000 / CHRN_FREQ_LIM;
     m_duration.init(limitDuration);
+    m_nbIgnored = NB_IGNORED_PERIODS / MAIN_FREQ * m_theoricalFreq; // number of periods to ignore at startup
 }
 
 /**
@@ -87,19 +89,20 @@ void Chrono::endCycle()
     }
 
     int end_time = esp_timer_get_time();
-    int adc_conversion_time = end_time - m_startTime;
-    m_duration.add(adc_conversion_time, m_iter);
+    int execution_duration = end_time - m_startTime;                            // µs
+    m_startTime = 0;
+    m_duration.add(execution_duration, m_iter);
 
+    if (m_nbIgnored <= 0.) {
+        float currentFreq = 1000000. / (end_time - m_lastEndTime);              // Hz
+        float cpuUsage = 100. * execution_duration * currentFreq / 1000000.;    // %
+        m_cpuUsage.add(cpuUsage, m_iter);
+    }
 
-    float cpuUsage = adc_conversion_time * MAIN_FREQ / 10000.;
-    m_cpuUsage.add(cpuUsage, m_iter);
+    m_lastEndTime = end_time;
+
 
     m_iter++;
-
-    if (m_printFreq != 0 && m_iter == m_printFreq) {
-        print();
-        init();
-    }
 }
 
 

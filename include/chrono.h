@@ -1,6 +1,7 @@
 #ifndef __CHRONO_H
 #define __CHRONO_H
 
+#include "def.h"
 #include <string>
 #include <cJSON.h>
 #include <atomic>
@@ -10,7 +11,7 @@
 class Chrono
 {
 public:
-    Chrono(std::string name, float limitCpu, int m_nbIgnored = 0, int printFreq = 0);
+    Chrono(std::string name, float theoricalFreq = MAIN_FREQ);
     ~Chrono();
     void startCycle();
     void endCycle();
@@ -63,12 +64,12 @@ private:
             cJSON_AddNumberToObject(json, ("min(" + unity + ")").c_str(), min);
             cJSON_AddNumberToObject(json, ("mean(" + unity + ")").c_str(), mean);
             cJSON_AddNumberToObject(json, ("max(" + unity + ")").c_str(), max);
-            if (freq) {
+            /*if (freq) {
                 cJSON_AddNumberToObject(json, std::string("nbUnder " + std::to_string(limit) + unity + "(%)").c_str(), (float)nbOverDeadline / nbIter * 100);
             }
             else {
                 cJSON_AddNumberToObject(json, std::string("nbOver " + std::to_string(limit) + unity + "(%)").c_str(), (float)nbOverDeadline / nbIter * 100);
-            }
+            }*/
             return json;
         }
 
@@ -82,13 +83,14 @@ private:
 
     std::string m_name;
 
+    float m_theoricalFreq;
     float m_limitCpu;
-    int m_nbIgnored = 0;
-    int m_printFreq;
+    int m_nbIgnored;
 
-    uint64_t m_iter = 0;
+    uint64_t m_iter;
     int m_startTime;
     int m_lastStartTime;
+    int m_lastEndTime;
     int m_globalStartTime;
     
     Data m_freq;
