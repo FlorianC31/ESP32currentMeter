@@ -56,6 +56,9 @@
 #define FILTER_ORDER    2
 #define CUTOFF_FREQ     250             // Hz
 
+#define HAMMING_WINDOW_COEFF1 0.54
+#define HAMMING_WINDOW_COEFF2 0.46
+
 
 // Chrono configuration
 #define NB_IGNORED_PERIODS 20

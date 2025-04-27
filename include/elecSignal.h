@@ -17,7 +17,7 @@ public:
     float getLastValue(bool filtered = false) const;
     std::array<float, BUFFER_SIZE>* getData(bool fitered = false) const;
     void runAnalysis();
-    bool isReadyForProcessing() {return m_filteredDataBuffer.isBufferReadyForProcessing();}
+    bool isReadyForProcessing() {return (m_filteredDataBuffer.isBufferReadyForProcessing());}
 
 private:
     void calcFrequency();
@@ -25,6 +25,9 @@ private:
     void removeOffset();
     float getMeanValue() const;
     void calcRmsValue();
+    inline static float geHhammingCoeff(float n) {
+        return HAMMING_WINDOW_COEFF1 - HAMMING_WINDOW_COEFF2 * cos(2 * M_PI * n / (BUFFER_SIZE - 1));
+    }
 
 
 private:
@@ -36,6 +39,8 @@ private:
     AlternatingBuffer m_rawDataBuffer;          // Buffer for raw data
     AlternatingBuffer m_filteredDataBuffer;     // Buffer for filtered data
     IIRFilter m_filter;                         // Filter for the signal
+
+    uint16_t m_index;
 
     float m_period;
     float m_firstRisingZeroCrossingIndex;

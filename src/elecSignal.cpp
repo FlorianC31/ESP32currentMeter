@@ -7,7 +7,8 @@ ElecSignal::ElecSignal(std::string name, bool isTension, fft_config_t* fftManage
     m_isTension(isTension),
     m_calibCoeff(calibCoeff),
     m_fftManager(fftManager),
-    m_tensionSignal(tensionSignal)
+    m_tensionSignal(tensionSignal),
+    m_index(0)
 {
     
     multi_heap_info_t info;
@@ -49,9 +50,12 @@ ElecSignal::~ElecSignal()
 void ElecSignal::addRawData(float data)
 {
     // Store the raw data and filtered data in their respective buffers, adjusted by the reference signal
-    m_rawDataBuffer.addData(data );
+    m_rawDataBuffer.addData(data * geHhammingCoeff(m_index));
     m_filteredDataBuffer.addData(m_filter.process(data));
-
+    m_index++;
+    if(m_index >= BUFFER_SIZE) {
+        m_index = 0;
+    }
 }
 
 
