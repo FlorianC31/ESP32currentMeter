@@ -19,7 +19,7 @@ TaskHandle_t analysis_task_handle = NULL;
 TaskHandle_t memory_handle = NULL;
 TaskHandle_t fft_handle = NULL;
 QueueHandle_t adcDataQueue = NULL;
-std::array<ElecSignal*, NB_CHANNELS> signalsData = {nullptr};
+std::array<ElecSignal*, NB_SIGNALS> signalsData = {nullptr};
 
 int nbIgnoredPeriods = 20;
 
@@ -44,12 +44,11 @@ void initSignals()
 {
     fft_config_t *fftManager = (fft_config_t *)malloc(sizeof(fft_config_t));
 
-    signalsData[VREF_ID] = new ElecSignal("Vref", false, fftManager);
-    signalsData[TENSION_ID] = new ElecSignal("Tension", true, fftManager, TENSION_COEF, signalsData[VREF_ID]);
+    signalsData[TENSION_ID] = new ElecSignal("Tension", true, fftManager, TENSION_COEF);
 
     for (uint8_t i = 0; i < NB_CURRENTS; i++) {
         std::string signalName = "Current" + std::to_string(i + 1);
-        signalsData[i + 1] = new ElecSignal(signalName, false, fftManager, currentCalibCoeff[i], signalsData[VREF_ID], signalsData[TENSION_ID]);
+        signalsData[i + 1] = new ElecSignal(signalName, false, fftManager, currentCalibCoeff[i], signalsData[TENSION_ID]);
     }
 }
 
@@ -70,12 +69,12 @@ void process(void *pvParameters) {
     
     while (1) {
         if (xQueueReceive(adcDataQueue, &adcRawData, 1) == pdPASS) {
-            for (uint8_t i = 0; i < NB_CHANNELS; i++) {
+            for (uint8_t i = 0; i < NB_SIGNALS; i++) {
                 //ESP_LOGI(TAG, "addRawData(adcRawData[%i])", i);
-                signalsData[i]->addRawData(adcRawData[i]);
+                signalsData[i]->addRawData(adcRawData[i] - adcRawData[VREF_ID]);
             }   
             processChrono.endCycle();
-            if (signalsData[VREF_ID]->isReadyForProcessing()) {
+            if (signalsData[LAST_CURRENT_ID]->isReadyForProcessing()) {
                 xTaskNotify(analysis_task_handle, 0x01, eSetBits);
             }
         }

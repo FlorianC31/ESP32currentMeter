@@ -9,7 +9,7 @@
 class ElecSignal
 {
 public:
-    ElecSignal(std::string name, bool isTension, fft_config_t* fftManager, float calibCoeff = 0., ElecSignal* refSignal = nullptr, ElecSignal* tensionSignal = nullptr);
+    ElecSignal(std::string name, bool isTension, fft_config_t* fftManager, float calibCoeff = 0., ElecSignal* tensionSignal = nullptr);
     virtual ~ElecSignal();
 
     void addRawData(float data);
@@ -32,7 +32,6 @@ private:
     bool m_isTension;                           // Is the signal the tension signal?
     float m_calibCoeff;                         // Calibration coefficient
     fft_config_t* m_fftManager = nullptr;       // FFT manager for the signal
-    ElecSignal* m_refSignal;                    // Pointer to the signal of Vref
     ElecSignal* m_tensionSignal;                // Pointer to the signal of Tension
     AlternatingBuffer m_rawDataBuffer;          // Buffer for raw data
     AlternatingBuffer m_filteredDataBuffer;     // Buffer for filtered data

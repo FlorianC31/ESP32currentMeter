@@ -19,7 +19,7 @@ extern Chrono chronoChrono;
 extern Chrono bufferMutexChrono;
 extern Chrono bufferTotalChrono;
 
-extern std::array<ElecSignal*, NB_CHANNELS> signalsData;
+extern std::array<ElecSignal*, NB_SIGNALS> signalsData;
 
 extern QueueHandle_t adcDataQueue;
 

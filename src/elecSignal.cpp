@@ -2,12 +2,11 @@
 
 
 
-ElecSignal::ElecSignal(std::string name, bool isTension, fft_config_t* fftManager, float calibCoeff, ElecSignal* refSignal, ElecSignal* tensionSignal) :
+ElecSignal::ElecSignal(std::string name, bool isTension, fft_config_t* fftManager, float calibCoeff, ElecSignal* tensionSignal) :
     m_name(name),
     m_isTension(isTension),
     m_calibCoeff(calibCoeff),
     m_fftManager(fftManager),
-    m_refSignal(refSignal),
     m_tensionSignal(tensionSignal)
 {
     
@@ -49,16 +48,10 @@ ElecSignal::~ElecSignal()
 
 void ElecSignal::addRawData(float data)
 {
-    float filteredData = m_filter.process(data);
-    if (m_refSignal != nullptr) {
-        // Store the raw data and filtered data in their respective buffers, adjusted by the reference signal
-        m_rawDataBuffer.addData(data - m_refSignal->getLastValue());
-        m_filteredDataBuffer.addData(filteredData - m_refSignal->getLastValue(true));
-    } else {
-        // Store the raw data and filtered data in their respective buffers without adjustment
-        m_rawDataBuffer.addData(data);
-        m_filteredDataBuffer.addData(filteredData);
-    }
+    // Store the raw data and filtered data in their respective buffers, adjusted by the reference signal
+    m_rawDataBuffer.addData(data );
+    m_filteredDataBuffer.addData(m_filter.process(data));
+
 }
 
 
