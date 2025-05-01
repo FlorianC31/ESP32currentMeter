@@ -11,7 +11,7 @@
 
 
 extern TaskHandle_t adc_task_handle;
-extern TaskHandle_t process_task_handle;
+extern TaskHandle_t buffering_task_handle;
 
 extern std::vector<Chrono*> chronoList;
 extern Chrono adcChrono;
@@ -20,8 +20,6 @@ extern Chrono bufferMutexChrono;
 extern Chrono bufferTotalChrono;
 
 extern std::array<ElecSignal*, NB_SIGNALS> signalsData;
-
-extern QueueHandle_t adcDataQueue;
 
 extern ErrorManager errorManager;
 

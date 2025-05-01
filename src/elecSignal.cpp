@@ -50,7 +50,8 @@ ElecSignal::~ElecSignal()
 void ElecSignal::addRawData(float data)
 {
     // Store the raw data and filtered data in their respective buffers, adjusted by the reference signal
-    m_rawDataBuffer.addData(data * geHhammingCoeff(m_index));
+    //m_rawDataBuffer.addData(data * geHhammingCoeff(m_index));
+    //ESP_LOGI(m_name.c_str(), "Raw data: %f", data);
     m_filteredDataBuffer.addData(m_filter.process(data));
     m_index++;
     if(m_index >= BUFFER_SIZE) {

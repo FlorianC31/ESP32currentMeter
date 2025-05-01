@@ -38,9 +38,8 @@
 #define NB_SIGNALS      (NB_CHANNELS - 1)
 #define SAMPLE_FREQ     (NB_SAMPLES * MAIN_FREQ)                // Hz
 #define TIM_PERIOD      (1000000 / MAIN_FREQ / NB_SAMPLES)      // µs
-#define TENSION_ID      0                                       // first channel
-#define VREF_ID         NB_SIGNALS  // Vref signal ID           // last channel
-#define LAST_CURRENT_ID (NB_SIGNALS - 1)                        // last current signal ID
+#define VREF_ID         0                                       // Vref signal ID (firt channel)
+#define TENSION_ID      1                                       // Tension signal IF (second channel)
 #define BUFFER_SIZE     1024
 #define NB_FULL_PERIODS int(BUFFER_SIZE/NB_SAMPLES)             // number of full periods in the buffer
 #define QUEUE_SIZE      (NB_SAMPLES * 2)                        // 2 periods of samples

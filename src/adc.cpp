@@ -81,8 +81,6 @@ void adc_task(void *pvParameters) {
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(timer, MAIN_PERIOD)); // 20ms = 50Hz
 
-    std::array<uint16_t, NB_CHANNELS> adcData;
-
     while (1) {
 
         /**
@@ -106,7 +104,7 @@ void adc_task(void *pvParameters) {
             else {
                 //ESP_LOGI(TAG, "Read data size match, expected %u, got %" PRIu32 "", ADC_BUFFER_SIZE, ret_num);
             }
-
+            float vRef = 0.0;
             uint8_t channelId = 0;
             //ESP_LOGI("TASK", "ret is %x, ret_num is %"PRIu32" bytes", ret, ret_num);
             for (int i = 0; i < ret_num; i += SOC_ADC_DIGI_RESULT_BYTES) {
@@ -115,24 +113,21 @@ void adc_task(void *pvParameters) {
                 uint16_t data = static_cast<uint16_t>(p->type2.data);
                 /* Check the channel number validation, the data is invalid if the channel num exceed the maximum channel */
                 if (chanNum < SOC_ADC_CHANNEL_NUM(ADC_UNIT_1) && ADC_CHANNELS[channelId] == chanNum) {
-                    //ESP_LOGI(TAG, "Unit: %s, Channel: %u, Value: %u", "ADC1", chanNum, data);
-                    adcData[channelId] = data;
+                    //ESP_LOGI(TAG, "Valid data [%s_%u_%u] - Channel %u", "ADC1", chanNum, data, channelId);
+                    if (channelId == VREF_ID) {
+                        vRef = data;
+                    }
+                    else {
+                        signalsData[channelId - 1]->addRawData(data - vRef);
+                    }
                 } else {
-                    ESP_LOGW(TAG, "Invalid data [%s_%u_%u]", "ADC1", chanNum, data);
+                    ESP_LOGE(TAG, "Invalid data [%s_%u_%u]", "ADC1", chanNum, data);
                 }
 
                 channelId++;
-                if (channelId == NB_CHANNELS) {
+                if (channelId >= NB_CHANNELS) {
                     channelId = 0;
-                    if (xQueueSend(adcDataQueue, &adcData, 1) != pdPASS) {
-                        ESP_LOGE(TAG, "Error sending ADC data to the queue");
-                    }
-                    else {
-                        //ESP_LOGE(TAG, "ADC data successfully sent to the queue - %i", nbSample);
-                    }
                 }
-
-                
             }        
 
         } else if (ret == ESP_ERR_TIMEOUT) {

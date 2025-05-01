@@ -14,10 +14,9 @@
 #define PWM_CHANNEL LEDC_CHANNEL_0        // Canal LEDC 0
 #define PWM_DUTY 2048       // 50% duty cycle (2048 sur 4095 pour 12-bit)
 
-TaskHandle_t process_task_handle = NULL;
+TaskHandle_t buffering_task_handle = NULL;
 TaskHandle_t analysis_task_handle = NULL;
 TaskHandle_t memory_handle = NULL;
-QueueHandle_t adcDataQueue = NULL;
 std::array<ElecSignal*, NB_SIGNALS> signalsData = {nullptr};
 
 int nbIgnoredPeriods = 20;
@@ -43,11 +42,12 @@ void initSignals()
 {
     fft_config_t *fftManager = (fft_config_t *)malloc(sizeof(fft_config_t));
 
-    signalsData[TENSION_ID] = new ElecSignal("Tension", true, fftManager, TENSION_COEF);
+    signalsData[TENSION_ID - 1] = new ElecSignal("Tension", true, fftManager, TENSION_COEF);
 
     for (uint8_t i = 0; i < NB_CURRENTS; i++) {
-        std::string signalName = "Current" + std::to_string(i + 1);
-        signalsData[i + 1] = new ElecSignal(signalName, false, fftManager, currentCalibCoeff[i], signalsData[TENSION_ID]);
+        uint8_t currentId = TENSION_ID + i;
+        std::string signalName = "Current" + std::to_string(currentId);
+        signalsData[currentId] = new ElecSignal(signalName, false, fftManager, currentCalibCoeff[i], signalsData[TENSION_ID]);
     }
 }
 
@@ -55,31 +55,7 @@ void initSignals()
 
 
 
-/**
- * @brief Process task function
- * 
- * This task processes the ADC data.
- */
-void process(void *pvParameters) {
 
-    static const char* TAG = "PROCESS_TASK";
-
-    ESP_LOGI(TAG, "Process task starting");
-    
-    while (1) {
-        if (xQueueReceive(adcDataQueue, &adcRawData, 1) == pdPASS) {
-            bufferingChrono.startCycle();
-            for (uint8_t i = 0; i < NB_SIGNALS; i++) {
-                //ESP_LOGI(TAG, "addRawData(adcRawData[%i])", i);
-                signalsData[i]->addRawData(adcRawData[i] - adcRawData[VREF_ID]);
-            }   
-            bufferingChrono.endCycle();
-            if (signalsData[LAST_CURRENT_ID]->isReadyForProcessing()) {
-                xTaskNotify(analysis_task_handle, 0x01, eSetBits);
-            }
-        }
-    }
-}
 
 
 /**
@@ -138,16 +114,10 @@ extern "C" void app_main(void) {
     //adc_init();
     wifi_init_sta();
 
-    adcDataQueue = xQueueCreate(QUEUE_SIZE, sizeof(std::array<uint16_t, NB_CHANNELS>));
-    if (adcDataQueue == NULL) {
-        ESP_LOGE(TAG, "Failed to create ADC data queue");
-        vTaskDelete(NULL);
-    }
 
     start_webserver();
     initSignals();
 
-    xTaskCreatePinnedToCore(process, "Process Task", 8192, NULL, 4, &process_task_handle, 0);
     xTaskCreatePinnedToCore(adc_task, "ADC Task", 8192, NULL, configMAX_PRIORITIES - 1, &adc_task_handle, 0);
     xTaskCreatePinnedToCore(dataAnalysis, "Data Analysis Task", 8192, NULL, configMAX_PRIORITIES - 1, &analysis_task_handle, 1);
     //xTaskCreatePinnedToCore(memory_task, "MEMORY Task", 8192, NULL, 5, &memory_handle, 1);
